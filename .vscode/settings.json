@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "kprint.h": "c",
+        "idt.h": "c"
+    }
+}

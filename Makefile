@@ -1,0 +1,104 @@
+# Cross-compiler
+CROSS_PATH = ../../cross-compiler/ia32/bin
+
+LD = $(CROSS_PATH)/i686-pc-linux-gnu-ld
+CC = $(CROSS_PATH)/i686-pc-linux-gnu-gcc
+
+# Diretórios principais
+BINDIR   = ./bin
+BUILDDIR = ./build
+
+INCLUDES = -I./src
+
+FLAGS = -g -ffreestanding -falign-jumps -falign-functions \
+-falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer \
+-finline-functions -Wno-unused-function -fno-builtin -Werror \
+-Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib \
+-nostartfiles -nodefaultlibs -Wall -O0 -Iinc
+
+# ---------------------------------------------------------------------
+#   DETECÇÃO AUTOMÁTICA DE FONTES
+# ---------------------------------------------------------------------
+
+# Bootloader é especial
+BOOT_SRC = ./src/boot/boot.asm
+
+# Kernel.asm movido para src/asm/
+KERNEL_ASM = ./src/asm/kernel.asm
+KERNEL_ASM_OBJ = ./build/asm/kernel.o
+
+# ★ ADICIONADO — stub baixo
+
+# Detecta automaticamente todos os .c em src/ e subpastas
+C_SRC := $(wildcard ./src/*.c ./src/*/*.c ./src/*/*/*.c)
+C_OBJ := $(patsubst ./src/%.c,./build/%.o,$(C_SRC))
+
+# Detecta todos os .asm (exceto boot.asm, kernel.asm e kernel_low.asm)
+ASM_SRC := $(filter-out $(BOOT_SRC) $(KERNEL_ASM) , \
+           $(wildcard ./src/*.asm ./src/*/*.asm ./src/*/*/*.asm))
+
+ASM_OBJ := $(patsubst ./src/%.asm,./build/%.o,$(ASM_SRC))
+
+# ★ ADICIONADO — inclui kernel_low.asm
+ASM_OBJ +=  $(KERNEL_ASM_OBJ)
+
+# ---------------------------------------------------------------------
+# TARGETS PRINCIPAIS
+# ---------------------------------------------------------------------
+
+all: dirs $(BINDIR)/boot.bin $(BINDIR)/kernel.bin 
+	rm -f $(BINDIR)/os.bin
+	dd if=$(BINDIR)/boot.bin  >> $(BINDIR)/os.bin
+	dd if=$(BINDIR)/kernel.bin >> $(BINDIR)/os.bin
+	dd if=/dev/zero bs=512 count=100 >> $(BINDIR)/os.bin
+
+dirs:
+	mkdir -p $(BINDIR) $(BUILDDIR)
+
+# Bootloader
+$(BINDIR)/boot.bin: $(BOOT_SRC)
+	nasm -f bin $(BOOT_SRC) -o $(BINDIR)/boot.bin
+
+# Gera o kernel (2-pass linking)
+$(BINDIR)/kernel.bin: $(ASM_OBJ) $(C_OBJ)
+	$(LD) -g -relocatable $(ASM_OBJ) $(C_OBJ) -o $(BUILDDIR)/kernelfull.o
+	$(CC) $(FLAGS) -T ./src/linker.ld -o $(BINDIR)/kernel.bin $(BUILDDIR)/kernelfull.o
+
+
+
+# ---------------------------------------------------------------------
+# REGRAS GENÉRICAS
+# ---------------------------------------------------------------------
+
+./build/%.o: ./src/%.c
+	mkdir -p $(dir $@)
+	$(CC) $(INCLUDES) $(FLAGS) -std=gnu99 -c $< -o $@
+
+./build/%.o: ./src/%.asm
+	mkdir -p $(dir $@)
+	nasm -f elf -g $< -o $@
+
+# Kernel.asm (src/asm/kernel.asm → build/asm/kernel.o)
+$(KERNEL_ASM_OBJ): $(KERNEL_ASM)
+	mkdir -p $(dir $@)
+	nasm -f elf -g $< -o $@
+
+
+# ---------------------------------------------------------------------
+# EXECUÇÃO EM QEMU
+# ---------------------------------------------------------------------
+
+run: 	
+	qemu-system-i386 -s -S -hda $(BINDIR)/os.bin
+
+run64:
+	qemu-system-x86_64 -s -S -hda $(BINDIR)/os.bin
+
+# ---------------------------------------------------------------------
+# LIMPEZA
+# ---------------------------------------------------------------------
+
+clean:
+	rm -rf $(BINDIR)/*.bin
+	rm -rf $(BINDIR)/os.bin
+	rm -rf $(BUILDDIR)
