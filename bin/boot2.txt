@@ -17,8 +17,9 @@
 0000001F  0000              add [bx+si],al
 00000021  0000              add [bx+si],al
 00000023  00EA              add dl,ch
-00000025  297C00            sub [si+0x0],di
-00000028  00FA              add dl,bh
+00000025  2900              sub [bx+si],ax
+00000027  0000              add [bx+si],al
+00000029  FA                cli
 0000002A  FC                cld
 0000002B  31C0              xor ax,ax
 0000002D  8ED8              mov ds,ax
@@ -31,13 +32,13 @@
 0000003D  B90204            mov cx,0x402
 00000040  E85601            call 0x199
 00000043  E89D00            call 0xe3
-00000046  BE817D            mov si,0x7d81
+00000046  BE8101            mov si,0x181
 00000049  E8FD00            call 0x149
-0000004C  0F0116B67D        lgdt [0x7db6]
+0000004C  0F0116B601        lgdt [0x1b6]
 00000051  0F20C0            mov eax,cr0
 00000054  6683C801          or eax,byte +0x1
 00000058  0F22C0            mov cr0,eax
-0000005B  EA637C0800        jmp 0x8:0x7c63
+0000005B  EA63000800        jmp 0x8:0x63
 00000060  F4                hlt
 00000061  EBFD              jmp short 0x60
 00000063  66B810008ED8      mov eax,0xd88e0010
@@ -166,7 +167,7 @@
 000001B0  0000              add [bx+si],al
 000001B2  0092CF00          add [bp+si+0xcf],dl
 000001B6  17                pop ss
-000001B7  009E7D00          add [bp+0x7d],bl
+000001B7  009E0100          add [bp+0x1],bl
 000001BB  0000              add [bx+si],al
 000001BD  0000              add [bx+si],al
 000001BF  0000              add [bx+si],al

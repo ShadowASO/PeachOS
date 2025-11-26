@@ -21,7 +21,8 @@ FLAGS = -g -ffreestanding -falign-jumps -falign-functions \
 # ---------------------------------------------------------------------
 
 # Bootloader é especial
-BOOT_SRC = ./src/boot/boot.asm
+BOOT1_SRC = ./src/boot/boot1.asm
+BOOT2_SRC = ./src/boot/boot2.asm
 
 # Kernel.asm movido para src/asm/
 KERNEL_ASM = ./src/asm/kernel.asm
@@ -34,7 +35,7 @@ C_SRC := $(wildcard ./src/*.c ./src/*/*.c ./src/*/*/*.c)
 C_OBJ := $(patsubst ./src/%.c,./build/%.o,$(C_SRC))
 
 # Detecta todos os .asm (exceto boot.asm, kernel.asm e kernel_low.asm)
-ASM_SRC := $(filter-out $(BOOT_SRC) $(KERNEL_ASM) , \
+ASM_SRC := $(filter-out $(BOOT1_SRC) $(BOOT2_SRC)  $(KERNEL_ASM) , \
            $(wildcard ./src/*.asm ./src/*/*.asm ./src/*/*/*.asm))
 
 ASM_OBJ := $(patsubst ./src/%.asm,./build/%.o,$(ASM_SRC))
@@ -46,9 +47,10 @@ ASM_OBJ +=  $(KERNEL_ASM_OBJ)
 # TARGETS PRINCIPAIS
 # ---------------------------------------------------------------------
 
-all: dirs $(BINDIR)/boot.bin $(BINDIR)/kernel.bin 
+all: dirs $(BINDIR)/boot1.bin $(BINDIR)/boot2.bin $(BINDIR)/kernel.bin 
 	rm -f $(BINDIR)/os.bin
-	dd if=$(BINDIR)/boot.bin  >> $(BINDIR)/os.bin
+	dd if=$(BINDIR)/boot1.bin  >> $(BINDIR)/os.bin
+	dd if=$(BINDIR)/boot2.bin  >> $(BINDIR)/os.bin
 	dd if=$(BINDIR)/kernel.bin >> $(BINDIR)/os.bin
 	dd if=/dev/zero bs=512 count=100 >> $(BINDIR)/os.bin
 
@@ -56,8 +58,12 @@ dirs:
 	mkdir -p $(BINDIR) $(BUILDDIR)
 
 # Bootloader
-$(BINDIR)/boot.bin: $(BOOT_SRC)
-	nasm -f bin $(BOOT_SRC) -o $(BINDIR)/boot.bin
+$(BINDIR)/boot1.bin: $(BOOT1_SRC)
+	nasm -f bin $(BOOT1_SRC) -o $(BINDIR)/boot1.bin
+
+# Bootloader2
+$(BINDIR)/boot2.bin: $(BOOT2_SRC)
+	nasm -f bin $(BOOT2_SRC) -o $(BINDIR)/boot2.bin
 
 # Gera o kernel (2-pass linking)
 $(BINDIR)/kernel.bin: $(ASM_OBJ) $(C_OBJ)

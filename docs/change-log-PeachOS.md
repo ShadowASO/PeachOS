@@ -21,3 +21,18 @@ licar o kernel no endereço físico correto e permtir que haja uma relação cor
 04) Criados as constantes de manipuladores de bits;
 05) Criado um arquivo config.h para o kernel e um arquivo config.inc para o có-
 digo assembly;
+
+# -----------------------------------------------------------------------------
+#             Em 24-11-2025: Versão 1.0.0                                    
+# -----------------------------------------------------------------------------
+a) criadas as rotinas de extração do mapa de memória durante o boot. Muito tra-
+balho;
+b) ajuste e refinamentos no código de boot e inicialização do kernel para a ex-
+tração do mapa da meória;
+c) criei repositório para o projeto do PeachOS;
+
+# -----------------------------------------------------------------------------
+#             Em 25-11-2025: Versão 1.0.0                                    
+# -----------------------------------------------------------------------------
+a) revisando o Kernel Development e fazendo ajustes no código do bootloader,
+a partir da compreensão adquirida no modo real e seu endereçamento;

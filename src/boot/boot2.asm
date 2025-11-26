@@ -1,68 +1,74 @@
-; Para evitar erros, tais como o carregamento dos registros de segmentos com valores inconsistente,
-; recomenda-se iniciarlizar os registros de segmento, como abaixo. Colocamos ORG==0 e atribuímos
-; o valor inicial dos registros em 0x7C0. Esse é o valor correto a ser atribuído aos registros por-
-; que ele será multiplicado por 16: 0x7C0 * 16 = [ 0x7C00]
+;------------------------------------------------------------------------------------------------
+; File: boot2.asm.
+; Data: 26-11-2025
+;
+; O boot2 contém o código relevante para a inicialização do kernel e não está limitado ao tamanho
+; de 512 byte.
+; -------------------------------------------------------------------------------------------------
 
 [BITS 16]
-ORG 0x7c00
+[ORG 0x8000]          ; endereço onde o Stage 1 vai carregar
 
 CODE_SEG equ gdt_code-gdt_start
 DATA_SEG equ gdt_data-gdt_start
+KERNEL_SETOR equ 3
 
 ; ------------------------------------------------------------
 ; Área fixa em 0x9000:0000 para informações do E820
 ; ------------------------------------------------------------
 E820_BASE_REAL    equ 0x9000 ; counter
-; E820_BASE_LINEAR    equ 0x00090000 ; buf
 
-
-    jmp short start
-    nop
-
-times 33 db 0
-
-start:
-    jmp 0x0:step2 ; O bootloader é sempre carrgado no endereço 0x7c00. Assim, podemos saltar direta
-                ; mente do DS:start, sendo DS==0x7c0 e start==endereço no código: 0x7c00
-
-step2:
+stage2:
 
     cli ; Clear Interrupts
-
     cld 
 
-    xor ax, ax
+    xor ax, ax ; 0x0      
     mov ds, ax
     mov es, ax
     mov ss, ax
+   
+
+    ; ponteiro da pilha
     mov sp, 0x7c00
-      
-    sti ; Enables Interrupts
-
-
-.load_protected:
-
-    cli ; Clear Interrupts
-
-    ; Limpo a região E820 em 0x9000:0000 (2 bytes count + 1024 bytes buffer)
+    
+     ;jmp $
+    ;-------------------------------------------------------------------------
+    ;                  Mapa da Memória Física
+    ;-------------------------------------------------------------------------
+    ;      Limpo o buffer para E820: 0x9000:0000 (4 bytes + 1024 bytes)
+    ;     2 bytes: count
+    ;     2 bytes: entry size
+    ;  1024 bytes: buffer
+    ;------------------------------------------------------------------------
     mov ax, E820_BASE_REAL
     mov es, ax
     xor di, di              ; ES:DI = 0x9000:0000
     mov cx, 1024 + 2        ; count (2 bytes) + buffer (1024)
     call memzero
-
-    ;Chama rotina x820 para gerar o mapa de memória
+   
+    ;-------------------------------------------------------------------------
+    ;   E820 - Extrai o Mapa da Memória Física
+    ;-------------------------------------------------------------------------
     call e820_collect
+    
+    ;---------------------------------------------------------------------------
           
     mov si, msgProtegido
     call print
 
+    ;jmp $
+
+    ;--------------------------------------------------------------------------
+    ;                 Modo Protegido
+    ;-------------------------------------------------------------------------
     ; Entra no modo protegido
+    ;-------------------------------------------------------------------------
     lgdt[gdt_descriptor]
     mov eax, cr0
     or eax, 0x1
     mov cr0, eax
-        
+    ;------------------------------------------------------------------------   
     jmp CODE_SEG:load32  ;far jump para recarregar o CS
 
 .hang:
@@ -83,8 +89,12 @@ load32:
     or al, 2
     out 0x92, al
     
-    ;Carrega o kernel LBA
-    mov eax, 1          ; Setor: número do setor de início (0 é o bootloader)
+    ;Carrega o kernel com o  LBA
+    ;mov eax, 1          ; Setor: número do setor de início (0 é o bootloader)
+    mov eax, KERNEL_SETOR ; Esta constante possui o número do primeiro setor do kernel a ser copiado
+                          ; para o endereço 0x0100000.
+                          ; Como estamos inserindo um setor adicional pára o boot, o kernel estará no
+                          ; Setor 2 do disco.
     mov ecx, 100        ; Total: total de setores para ler
     mov edi, 0x0100000  ; Endereço na memória para carregar os setores / 1MB
     call ata_lba_read
@@ -219,26 +229,6 @@ e820_collect:
     hlt
     jmp .hang
 
-print:
-    mov bx,0
-  .loop:
-    lodsb
-    cmp al,0
-    je .done
-    call print_char
-    jmp .loop
-
-  .done:
-    ret
-
-print_char:
-    mov ah, 0eh   
-    int 0x10  ; interrupção da BIOS
-    ret
-
-msgReal: db 'Primeiro Estagio: OS em Modo Real!', 0x0D, 0x0A, 0
-msgProtegido: db 'OS em Modo Protegido!', 0x0D, 0x0A, 0
-
 ; -------------------------------------------------------
 ; Zera CX bytes começando em ES:DI
 ; -------------------------------------------------------
@@ -278,6 +268,24 @@ gdt_descriptor:
     dd gdt_start
 
 
+print:
+    mov bx,0
+  .loop:
+    lodsb
+    cmp al,0
+    je .done
+    call print_char
+    jmp .loop
 
-times 510-($ - $$) db 0
-dw 0xAA55
+  .done:
+    ret
+
+print_char:
+    mov ah, 0eh   
+    int 0x10  ; interrupção da BIOS
+    ret
+
+msgReal: db 'Primeiro Estagio: OS em Modo Real!', 0x0D, 0x0A, 0
+msgProtegido: db 'OS em Modo Protegido!', 0x0D, 0x0A, 0
+
+times 1024-($ - $$) db 0
