@@ -11,11 +11,17 @@
 [BITS 16]
 ORG 0x7c00
 
+
 _start:
-    jmp short stage1
+    jmp short stage0
     nop
 
+;BIOS Parameter block
 times 33 db 0
+;------------------------------------
+
+stage0:
+    jmp 0x00:stage1
 
 stage1:
     cli

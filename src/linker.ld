@@ -40,7 +40,7 @@ SECTIONS
 
 
 
-    _kernel_ini_virt = .;
+    _kernel_ini_vmm = .;
     _kernel_ini_phys = . - KERNEL_OFFSET;
 
     /* --------------------------------------------------------
@@ -109,6 +109,10 @@ SECTIONS
         . += (PAGE_SIZE * 4);
         _kernel_stack_top = .;
     }
+
+    . = ALIGN(PAGE_SIZE);
+    . += PAGE_SIZE;
+    _kerne_end_vmm = .;
 }
 
 /* ------------------------------------------------------------
@@ -122,3 +126,11 @@ PROVIDE(_kernel_stack_top_phys = _kernel_stack_top - KERNEL_OFFSET);
 PROVIDE(page_directory_phys      = page_directory      - KERNEL_OFFSET);
 PROVIDE(page_table_identity_phys = page_table_identity - KERNEL_OFFSET);
 PROVIDE(page_table_high_phys     = page_table_high     - KERNEL_OFFSET);
+
+/* Limites do Kernel */
+PROVIDE(_kernel_ini_phys     = _kernel_ini_vmm     - KERNEL_OFFSET);
+PROVIDE(_kernel_ini_vmm     = _kernel_ini_vmm );
+
+
+PROVIDE(_kernel_end_phys     = _kerne_end_vmm     - KERNEL_OFFSET);
+PROVIDE(_kernel_end_vmm     = _kerne_end_vmm );

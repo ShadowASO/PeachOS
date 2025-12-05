@@ -8,6 +8,8 @@
 #include "./idt/idt.h"
 #include "./klib/kprintf.h"
 #include "./cpu/e820.h"
+#include "./mm/bootmem.h"
+#include "./mm/pmm.h"
 
 extern uint32_t _kernel_phys_base;
 extern uint32_t _kernel_virt_base;
@@ -17,6 +19,10 @@ extern uint32_t _kernel_virt_base;
 void kernel_main(void *e820_address) {
     // Agora você já está executando em 0xC0xxxxxx
     video_init();
+    //Identifica e mapeia a memória física disponível
+    bootmem_init(e820_address);
+
+    pmm_init(get_kernel_end_vmm(),get_memory_size());
 
     //Inicializa a IDT
     idt_init();
@@ -24,15 +30,18 @@ void kernel_main(void *e820_address) {
     setup_pic();
     kprint("\nHello, World!");
 
-    e820_address_t *E820=e820_address;
     
-    kprintf("\ncount=%d", E820->count);
+    // e820_address_t *E820=e820_address;
+    
+    // kprintf("\ncount=%d", E820->count);
 
-    kprintf("\nbuf=%p", E820);
+    // kprintf("\nbuf=%p", E820);
     
     kprintf("\nphys=%p virt=%p\n", &_kernel_phys_base, &_kernel_virt_base);
+     kprintf("\nphys=%p virt=%p\n", get_kernel_ini_phys(), get_kernel_ini_vmm());
 
-    memory_init(e820_address);
+    //memory_init(e820_address);
+    // bootmem_init(e820_address);
 
     pic_enable_irq(IRQ_KEYBOARD);
 

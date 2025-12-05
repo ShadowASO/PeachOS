@@ -6,6 +6,9 @@
 Este source code cria as estruturas e guarda o mapa de memória física obtido
 por meio da INT e820 durante o boot.
 --------------------------------------------------------------------------*/
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
  #include "e820.h"
 #include "../klib/kprintf.h"
 #include "../klib/memory.h"
@@ -16,6 +19,7 @@ por meio da INT e820 durante o boot.
 static phys_region_t phys_entries[MAX_E820_ENTRIES];
 //Cria a estrutura que irá guardar em memória o mapa da memória
 static phys_map_t physmap;
+static size_t physmem_size=0;
 
 
 void e820_collect_regions(e820_address_t *e820_address)
@@ -45,11 +49,15 @@ void e820_collect_regions(e820_address_t *e820_address)
             .type   = type,
             .acpi   = acpi,
         };
+        //Totalizo a memória disponível
+        physmem_size +=length;
         
         physmap.mem_map[i]=r;
     }
 }
-
+size_t e820_regions_count() {
+    return physmap.count;
+}
 
 uint64_t get_total_usable_ram(void)
 {
@@ -61,6 +69,12 @@ uint64_t get_total_usable_ram(void)
     }
 
     return sum;
+}
+
+uint64_t get_total_memory_size(void)
+{
+    
+    return physmem_size;
 }
 
 
@@ -82,6 +96,15 @@ void e820_debug_print()
         );
     }
 }
+
+phys_region_t * e820_region_by_index(size_t index)
+{    
+    if(index <=physmap.count) {
+        return &physmap.mem_map[index];
+    }
+    return NULL;
+}
+
 
 
 void memory_init(e820_address_t *e820_address)

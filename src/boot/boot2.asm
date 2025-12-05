@@ -82,7 +82,12 @@ load32:
     mov ax, DATA_SEG
     mov ds, ax
     mov es, ax
+    mov fs, ax
+    mov gs, ax
     mov ss, ax
+
+    mov ebp, 0x200000
+    mov esp, ebp
                     
     ;Enable the A20 line
     in al, 0x92
@@ -94,7 +99,7 @@ load32:
     mov eax, KERNEL_SETOR ; Esta constante possui o número do primeiro setor do kernel a ser copiado
                           ; para o endereço 0x0100000.
                           ; Como estamos inserindo um setor adicional pára o boot, o kernel estará no
-                          ; Setor 2 do disco.
+                          ; Setor 3 do disco.
     mov ecx, 100        ; Total: total de setores para ler
     mov edi, 0x0100000  ; Endereço na memória para carregar os setores / 1MB
     call ata_lba_read

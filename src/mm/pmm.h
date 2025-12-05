@@ -26,7 +26,7 @@
 
 /* Tamanho máximo de memória física suportada pelo bitmap.
  * Ajuste conforme sua máquina/uso (ex.: 256 MiB, 512 MiB, 1 GiB...). */
-#define PMM_MAX_PHYS_MEM      (MB_SIZE * 256)  /* 1 MB */
+#define PMM_MAX_PHYS_MEM      (MB_SIZE * 2)  /* 1 MB */
 
 /* Número total de frames (cada um de 4 KiB) que cabem em PMM_MAX_PHYS_MEM. */
 #define PMM_MAX_FRAMES        (PMM_MAX_PHYS_MEM / PMM_FRAME_SIZE)
@@ -36,7 +36,8 @@
 #define PMM_BITMAP_SIZE_U32   (PMM_MAX_FRAMES / 32u)
 
 /* Bitmap global (declarado em pmm.c) */
-extern uint32_t g_pmm_bitmap[PMM_BITMAP_SIZE_U32];
+// extern uint32_t g_pmm_bitmap[PMM_BITMAP_SIZE_U32];
+extern uint32_t *g_pmm_bitmap;
 
 /* Contador de frames livres (opcional, mas útil). */
 extern size_t g_pmm_free_frames;
@@ -80,7 +81,8 @@ extern size_t g_pmm_free_frames;
  *    - região do kernel
  *    - região reservada (BIOS, MMIO, etc.)
  */
-void pmm_init(uint32_t total_phys_mem_bytes);
+//void pmm_init(uint32_t total_phys_mem_bytes);
+void pmm_init(uint32_t *bitmap_ini, uint32_t phys_mem_size);
 
 /* Marca uma região de memória física como USADA.
  *  base_phys: endereço físico inicial
