@@ -1,3 +1,23 @@
+/*
+[ heap_region_start ] ----------------------+
+                                           |
+                                           v
+    +----------------------+  <- region_start (alinhado)
+    |  bitmap (u32...)     |
+    +----------------------+
+    |  heap_alloc_units[]  |
+    +----------------------+
+    |  padding p/ alinhar  |
+    +----------------------+  <- heap_start_addr (início efetivo da heap)
+    |  heap útil inicial   |  tamanho = heap_initial_size
+    |        ...           |
+    +----------------------+  <- heap_end_addr
+    |  espaço p/ expandir  |  até heap_max_size
+    |        ...           |
+    +----------------------+  <- heap_max_addr
+
+*/
+
 #ifndef boot_HEAP_H
 #define boot_HEAP_H
 

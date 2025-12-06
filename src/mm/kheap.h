@@ -1,77 +1,124 @@
 // kheap.h
+/*
+[ heap_region_start ] ----------------------+
+                                           |
+                                           v
+    +----------------------+  <- region_start (alinhado)
+    |  bitmap (u32...)     |
+    +----------------------+
+    |  heap_alloc_units[]  |
+    +----------------------+
+    |  padding p/ alinhar  |
+    +----------------------+  <- heap_start_addr (início efetivo da heap)
+    |  heap útil inicial   |  tamanho = heap_initial_size
+    |        ...           |
+    +----------------------+  <- heap_end_addr
+    |  espaço p/ expandir  |  até heap_max_size
+    |        ...           |
+    +----------------------+  <- heap_max_addr
+
+*/
 #ifndef KHEAP_H
 #define KHEAP_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdbool.h>
 
-/* ----------------------------------------------------
- * Alinhamento e limites da heap
- * -------------------------------------------------- */
+/* Granularidade básica da heap (cada unidade) */
+#ifndef HEAP_UNIT
+#define HEAP_UNIT        16u
+#endif
 
-// alinhamento mínimo "normal" (usado em kmalloc)
-#define HEAP_ALIGNMENT      8u
+/* Alinhamento mínimo padrão para kmalloc */
+#ifndef HEAP_ALIGNMENT
+#define HEAP_ALIGNMENT   8u
+#endif
 
-// endereço virtual onde a heap começa (ajuste conforme seu linker)
-#define KHEAP_START         0xC0000000u
+/* Tamanho de página usado pela heap (deve casar com o VMM/PMM) */
+#ifndef KHEAP_PAGE_SIZE
+#define KHEAP_PAGE_SIZE  4096u
+#endif
 
-// tamanho inicial (já mapeado) da heap ao iniciar o kernel
-#define KHEAP_INITIAL_SIZE  0x00100000u  /* 1 MiB */
-
-// tamanho máximo que a heap poderá crescer
-#define KHEAP_MAX_SIZE      0x0100000u  /* 16 MiB */
-
-/* unidade básica da heap (granularidade do bitmap) */
-#define HEAP_UNIT           16u          /* 16 bytes por unidade */
-
-/* tamanho de página (para expansão integrada ao PMM/VMM) */
-#define KHEAP_PAGE_SIZE     4096u        /* 4 KiB */
-
-/* número máximo de unidades dentro do tamanho máximo da heap */
-#define KHEAP_MAX_UNITS     (KHEAP_MAX_SIZE / HEAP_UNIT)
-
-/* bitmap: 1 bit por unidade */
-#define KHEAP_BITMAP_SIZE_U32  (KHEAP_MAX_UNITS / 32u)
-
-/* macro de alinhamento genérica */
-#define ALIGN_UP(x, align)   ( ((x) + ((align) - 1u)) & ~((align) - 1u) )
+/* Helpers de alinhamento (se ainda não estiverem em outro header) */
+#ifndef ALIGN_UP
+//#define ALIGN_UP(x, a)   ( ((uintptr_t)(x) + ((a) - 1u)) & ~((uintptr_t)((a) - 1u)) )
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Inicializa a heap:
- *  - heap_start: endereço virtual inicial (ex.: KHEAP_START)
- *  - heap_size:  tamanho inicial já mapeado (ex.: KHEAP_INITIAL_SIZE)
- *
- * Obs.: heap_size não pode exceder KHEAP_MAX_SIZE; se exceder, será truncado.
- *       A expansão posterior usará PMM + VMM para mapear novas páginas.
- */
-void kheap_init(uint32_t heap_start, uint32_t heap_size);
+/* ----------------------------------------------------
+ * Inicialização da heap
+ * -------------------------------------------------- */
 
-/* Alocação "normal" com alinhamento mínimo (HEAP_ALIGNMENT). */
+/**
+ * Inicializa a heap a partir de um endereço virtual `heap_start`
+ * e usando inicialmente `heap_size` bytes.
+ *
+ * Pressupõe que [heap_start, heap_start + heap_size) já esteja mapeado
+ * (por exemplo, pelo bootmem / paginador inicial).
+ */
+//void kheap_init(uint32_t heap_start, uint32_t heap_size);
+void kheap_init(uint32_t heap_region_start,
+                uint32_t heap_initial_size,
+                uint32_t heap_max_size);
+
+
+/* ----------------------------------------------------
+ * API de alocação
+ * -------------------------------------------------- */
+
+/* Aloca `size` bytes sem alinhamento especial (usa HEAP_ALIGNMENT) */
 void* kmalloc(size_t size);
 
-/* Alocação alinhada: garante que o ponteiro retornado seja múltiplo de `align`.
- * Ex.: kmalloc_aligned(4096, 4096) → bloco page-aligned. */
+/* Aloca `size` bytes com alinhamento explícito em `align` */
 void* kmalloc_aligned(size_t size, size_t align);
 
-/* Alocação zerada (n * size bytes), estilo calloc. */
+/* Aloca `n * size` bytes e zera a memória retornada */
 void* kcalloc(size_t n, size_t size);
 
-/* Realocação:
- *  - comporta-se como malloc se ptr == NULL;
- *  - como free se new_size == 0;
- *  - tenta expandir in-place, se possível; caso contrário, aloca, copia e libera. */
+/* Redimensiona um bloco previamente alocado, podendo mover o bloco */
 void* krealloc(void* ptr, size_t new_size);
 
-/* Libera um bloco previamente alocado. */
-void  kfree(void* ptr);
+/* Libera um bloco previamente alocado por kmalloc/kcalloc/kmalloc_aligned/krealloc */
+void kfree(void* ptr);
 
-/* (Opcional) estatísticas simples – quantidade de unidades livres. */
+void* kpage_alloc(void);
+
+/* se quiser um bloco de N páginas alinhado em página */
+void* kpages_alloc(size_t num_pages);
+
+/* ----------------------------------------------------
+ * Estatísticas da heap
+ * -------------------------------------------------- */
+
+/* Retorna o número de unidades livres (unidades de HEAP_UNIT bytes) */
 size_t kheap_get_free_units(void);
+
+/* Retorna o número total de unidades atualmente mapeadas/úteis */
 size_t kheap_get_total_units(void);
+
+/* ----------------------------------------------------
+ * Funções de debug (dump)
+ * -------------------------------------------------- */
+/* Habilite com -DKHEAP_DEBUG no compilador, se quiser condicionar */
+#ifdef KHEAP_DEBUG
+
+/**
+ * Faz o dump do bitmap de unidades da heap:
+ * - Mostra os words do bitmap e os bits (0 = livre, 1 = usado).
+ */
+void kheap_debug_dump_bitmap(void);
+
+/**
+ * Faz o dump dos blocos conhecidos pela tabela heap_alloc_units:
+ * - Mostra endereço, número de unidades, tamanho em bytes, etc.
+ */
+void kheap_debug_dump_blocks(void);
+
+#endif /* KHEAP_DEBUG */
 
 #ifdef __cplusplus
 }

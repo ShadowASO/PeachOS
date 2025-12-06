@@ -68,15 +68,15 @@ static inline e820_type_t e820_to_phys(uint32_t t) {
     }
 }
 
-// static inline size_t e820_get_count(phys_map_t *memmap) {
-//     return memmap->count;
-// }
 
-void memory_init(e820_address_t *e820_address);
-uint64_t get_total_memory_size(void);
-void e820_debug_print();
-//
+void e820_memory_init(e820_address_t *e820_address);
+
+size_t e820_memory_size(void);
+size_t e820_memory_free(void);
 size_t e820_regions_count();
+
 phys_region_t * e820_region_by_index(size_t index);
+
+void e820_debug_print();
 
 #endif

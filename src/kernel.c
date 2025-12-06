@@ -10,6 +10,27 @@
 #include "./cpu/e820.h"
 #include "./mm/bootmem.h"
 #include "./mm/pmm.h"
+#include "./mm/kheap.h"
+
+/*
+[ heap_region_start ] ----------------------+
+                                           |
+                                           v
+    +----------------------+  <- region_start (alinhado)
+    |  bitmap (u32...)     |
+    +----------------------+
+    |  heap_alloc_units[]  |
+    +----------------------+
+    |  padding p/ alinhar  |
+    +----------------------+  <- heap_start_addr (início efetivo da heap)
+    |  heap útil inicial   |  tamanho = heap_initial_size
+    |        ...           |
+    +----------------------+  <- heap_end_addr
+    |  espaço p/ expandir  |  até heap_max_size
+    |        ...           |
+    +----------------------+  <- heap_max_addr
+
+*/
 
 extern uint32_t _kernel_phys_base;
 extern uint32_t _kernel_virt_base;
@@ -19,30 +40,65 @@ extern uint32_t _kernel_virt_base;
 void kernel_main(void *e820_address) {
     // Agora você já está executando em 0xC0xxxxxx
     video_init();
+    
     //Identifica e mapeia a memória física disponível
     bootmem_init(e820_address);
 
+    //Cria o bitmap para controlar memória física
     pmm_init(get_kernel_end_vmm(),get_memory_size());
+
+    //Inicializa a kheap
+    uintptr_t heap_region_start = pmm_bitmap_end_addr();
+    size_t    heap_region_size  = MB_SIZE; // ex: alguns MiB
+    size_t    heap_initial_size = MB_SIZE;         // ex: 1 MiB inicial
+
+    kheap_init((uint32_t)heap_region_start,
+           (uint32_t)heap_region_size,
+           (uint32_t)heap_initial_size);
 
     //Inicializa a IDT
     idt_init();
     
+    //Inicializa o PIC
     setup_pic();
+
     kprint("\nHello, World!");
 
-    
-    // e820_address_t *E820=e820_address;
-    
-    // kprintf("\ncount=%d", E820->count);
+    kprintf("\nkernel size=0x%x", get_kernel_size());
+    kprintf("\nkernel begin=0x%x", get_kernel_ini_vmm());      
+    kprintf("\nbitmap end=0x%x", pmm_bitmap_end_addr());
 
-    // kprintf("\nbuf=%p", E820);
+    //kheap_init(pmm_bitmap_end_addr(), MB_SIZE,MB_SIZE);
+    // exemplo na inicialização do kernel:
+
+
+
+
+    uintptr_t end1=(uintptr_t)kmalloc(7000);
+    kprintf("\nkamlloc end1=%p", end1);
+
+    uintptr_t end2=(uintptr_t)kmalloc(4096);
+    kprintf("\nkamlloc end2=%p", end2);
+
+    uintptr_t pag1=(uintptr_t)kpage_alloc();
+    kprintf("\nkpage_alloc=%p", pag1);
+
+    pag1=(uintptr_t)kpages_alloc(3);
+    kprintf("\nkpages_alloc=%p", pag1);
+
+    kfree((void *)pag1);
+
+    pag1=(uintptr_t)kpage_alloc();
+    kprintf("\nkpage_alloc=%p", pag1);
+
     
-    kprintf("\nphys=%p virt=%p\n", &_kernel_phys_base, &_kernel_virt_base);
-     kprintf("\nphys=%p virt=%p\n", get_kernel_ini_phys(), get_kernel_ini_vmm());
+    // kprintf("\nphys=%p virt=%p\n", &_kernel_phys_base, &_kernel_virt_base);
+    //  kprintf("\nphys=%p virt=%p\n", get_kernel_ini_phys(), get_kernel_ini_vmm());
 
     //memory_init(e820_address);
     // bootmem_init(e820_address);
 
+    //Habilita o teclado
     pic_enable_irq(IRQ_KEYBOARD);
 
     // int a,b;

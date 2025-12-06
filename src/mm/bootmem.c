@@ -24,9 +24,13 @@ static uint32_t kernel_end_phys = 0;
 static size_t phys_mem_size=0;
 static size_t kernel_size=0;
 
+void make_memory_map(e820_address_t *e820_address) {
+     e820_memory_init(e820_address);
+}
+
 void bootmem_init(e820_address_t *e820_address) {
-    //Identifica a memória disponível no sistema
-    memory_init(e820_address);
+    //Identifica a memória disponível no sistema    
+    make_memory_map(e820_address);
     //Virtual
     kernel_ini_vmm=(void *)&_kernel_ini_vmm;
     kernel_end_vmm=(void *)&_kernel_end_vmm;
@@ -38,7 +42,7 @@ void bootmem_init(e820_address_t *e820_address) {
     kernel_size=kernel_end_phys-kernel_ini_phys;
 
     //Tamanho total da memória
-    phys_mem_size=get_total_memory_size();
+    phys_mem_size=e820_memory_size();
 }
 void *get_kernel_ini_vmm(){
     return kernel_ini_vmm;

@@ -17,9 +17,11 @@ por meio da INT e820 durante o boot.
 
 //Vetor para receber as entradas do mapa de memória
 static phys_region_t phys_entries[MAX_E820_ENTRIES];
+
 //Cria a estrutura que irá guardar em memória o mapa da memória
 static phys_map_t physmap;
 static size_t physmem_size=0;
+static size_t physmem_free=0;
 
 
 void e820_collect_regions(e820_address_t *e820_address)
@@ -49,8 +51,14 @@ void e820_collect_regions(e820_address_t *e820_address)
             .type   = type,
             .acpi   = acpi,
         };
-        //Totalizo a memória disponível
+
+        //Memória total
         physmem_size +=length;
+
+        //Memória livre
+        if (type == E820_TYPE_USABLE) {
+            physmem_free += length;
+        }
         
         physmap.mem_map[i]=r;
     }
@@ -59,22 +67,13 @@ size_t e820_regions_count() {
     return physmap.count;
 }
 
-uint64_t get_total_usable_ram(void)
-{
-    uint64_t sum = 0;
-
-    for (size_t i = 0; i < physmap.count; i++) {
-        if (physmap.mem_map[i].type == E820_TYPE_USABLE)
-            sum += physmap.mem_map[i].length;
-    }
-
-    return sum;
-}
-
-uint64_t get_total_memory_size(void)
-{
-    
+size_t e820_memory_size(void)
+{    
     return physmem_size;
+}
+size_t e820_memory_free(void)
+{    
+    return physmem_free;
 }
 
 
@@ -107,9 +106,9 @@ phys_region_t * e820_region_by_index(size_t index)
 
 
 
-void memory_init(e820_address_t *e820_address)
+void e820_memory_init(e820_address_t *e820_address)
 {
-    kprintf("\nDetectando memory via E820...\n");
+    kprintf("\ne820: Detectando memory via ...\n");
 
     //limpo o vetor de registros do mapa de memória
     memset(phys_entries,0, sizeof(phys_entries));
@@ -127,10 +126,10 @@ void memory_init(e820_address_t *e820_address)
     e820_collect_regions(e820_address);
 
     //Exibe na tela o mapa da memória    
-    e820_debug_print();
+    //e820_debug_print();
 
     //Extrai o total de memória livre
-    uint64_t total = get_total_usable_ram();
+    uint64_t mm_free = e820_memory_free();
 
-    kprintf("\nTotal de RAM livre: %u MB\n", (uint32_t)(total / (1024 * 1024)));
+    kprintf("\ne820: Memory RAM free: %u MB\n", (uint32_t)(mm_free / (1024 * 1024)));
 }

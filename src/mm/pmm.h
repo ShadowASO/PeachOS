@@ -3,6 +3,25 @@
  * Controla frames de memória física (usada/livre) por meio de um mapa de bits.
  * Cada bit representa um frame de tamanho fixo (PMM_FRAME_SIZE).
  */
+/*
+[ heap_region_start ] ----------------------+
+                                           |
+                                           v
+    +----------------------+  <- region_start (alinhado)
+    |  bitmap (u32...)     |
+    +----------------------+
+    |  heap_alloc_units[]  |
+    +----------------------+
+    |  padding p/ alinhar  |
+    +----------------------+  <- heap_start_addr (início efetivo da heap)
+    |  heap útil inicial   |  tamanho = heap_initial_size
+    |        ...           |
+    +----------------------+  <- heap_end_addr
+    |  espaço p/ expandir  |  até heap_max_size
+    |        ...           |
+    +----------------------+  <- heap_max_addr
+
+*/
 
 #ifndef PMM_H
 #define PMM_H
@@ -26,7 +45,7 @@
 
 /* Tamanho máximo de memória física suportada pelo bitmap.
  * Ajuste conforme sua máquina/uso (ex.: 256 MiB, 512 MiB, 1 GiB...). */
-#define PMM_MAX_PHYS_MEM      (MB_SIZE * 2)  /* 1 MB */
+#define PMM_MAX_PHYS_MEM      (MB_SIZE * 256)  /* 1 MB */
 
 /* Número total de frames (cada um de 4 KiB) que cabem em PMM_MAX_PHYS_MEM. */
 #define PMM_MAX_FRAMES        (PMM_MAX_PHYS_MEM / PMM_FRAME_SIZE)
@@ -34,13 +53,6 @@
 /* Cada uint32_t tem 32 bits, então:
  * total de entradas necessárias no bitmap. */
 #define PMM_BITMAP_SIZE_U32   (PMM_MAX_FRAMES / 32u)
-
-/* Bitmap global (declarado em pmm.c) */
-// extern uint32_t g_pmm_bitmap[PMM_BITMAP_SIZE_U32];
-extern uint32_t *g_pmm_bitmap;
-
-/* Contador de frames livres (opcional, mas útil). */
-extern size_t g_pmm_free_frames;
 
 /* --------------------------------------------------------------------
  * Macros de manipulação de bits no bitmap
@@ -81,7 +93,7 @@ extern size_t g_pmm_free_frames;
  *    - região do kernel
  *    - região reservada (BIOS, MMIO, etc.)
  */
-//void pmm_init(uint32_t total_phys_mem_bytes);
+
 void pmm_init(uint32_t *bitmap_ini, uint32_t phys_mem_size);
 
 /* Marca uma região de memória física como USADA.
@@ -111,9 +123,9 @@ void pmm_free_frame(uintptr_t frame_addr);
 size_t pmm_get_free_frame_count(void);
 
 /* Retorna quantidade de memória física livre em bytes. */
-static inline size_t pmm_get_free_memory_bytes(void)
-{
-    return g_pmm_free_frames * (size_t)PMM_FRAME_SIZE;
-}
+size_t pmm_get_free_memory_bytes(void);
+
+uintptr_t pmm_bitmap_end_addr(void);
+size_t pmm_calc_bitmap_size_bytes(size_t phys_mem_size);
 
 #endif /* PMM_H */
