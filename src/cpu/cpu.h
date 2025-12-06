@@ -57,4 +57,5 @@
 #define CR0_CD             BIT(CR0_CD_BIT)
 #define CR0_PG             BIT(CR0_PG_BIT)
 
+
 #endif

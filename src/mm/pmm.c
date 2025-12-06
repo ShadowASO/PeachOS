@@ -95,6 +95,9 @@ void pmm_mark_regions_status(void)
 
     /* Marca a região ocupada pelo kernel como usada. */
     pmm_mark_region_used(get_kernel_ini_phys(), get_kernel_size());
+    
+    /* Marcar a área do bitmap */
+    pmm_mark_region_used((uintptr_t)g_pmm_bitmap, g_pmm_bitmap_size);
 }
 
 static void pmm_recalc_free_frames(void)

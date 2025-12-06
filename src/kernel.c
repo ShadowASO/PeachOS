@@ -11,6 +11,7 @@
 #include "./mm/bootmem.h"
 #include "./mm/pmm.h"
 #include "./mm/kheap.h"
+#include "./mm/mm_setup.h"
 
 /*
 [ heap_region_start ] ----------------------+
@@ -40,22 +41,10 @@ extern uint32_t _kernel_virt_base;
 void kernel_main(void *e820_address) {
     // Agora você já está executando em 0xC0xxxxxx
     video_init();
+
+    //Setup da memória
+    memory_setup(e820_address);
     
-    //Identifica e mapeia a memória física disponível
-    bootmem_init(e820_address);
-
-    //Cria o bitmap para controlar memória física
-    pmm_init(get_kernel_end_vmm(),get_memory_size());
-
-    //Inicializa a kheap
-    uintptr_t heap_region_start = pmm_bitmap_end_addr();
-    size_t    heap_region_size  = MB_SIZE; // ex: alguns MiB
-    size_t    heap_initial_size = MB_SIZE;         // ex: 1 MiB inicial
-
-    kheap_init((uint32_t)heap_region_start,
-           (uint32_t)heap_region_size,
-           (uint32_t)heap_initial_size);
-
     //Inicializa a IDT
     idt_init();
     
@@ -67,11 +56,6 @@ void kernel_main(void *e820_address) {
     kprintf("\nkernel size=0x%x", get_kernel_size());
     kprintf("\nkernel begin=0x%x", get_kernel_ini_vmm());      
     kprintf("\nbitmap end=0x%x", pmm_bitmap_end_addr());
-
-    //kheap_init(pmm_bitmap_end_addr(), MB_SIZE,MB_SIZE);
-    // exemplo na inicialização do kernel:
-
-
 
 
     uintptr_t end1=(uintptr_t)kmalloc(7000);
@@ -94,9 +78,6 @@ void kernel_main(void *e820_address) {
     
     // kprintf("\nphys=%p virt=%p\n", &_kernel_phys_base, &_kernel_virt_base);
     //  kprintf("\nphys=%p virt=%p\n", get_kernel_ini_phys(), get_kernel_ini_vmm());
-
-    //memory_init(e820_address);
-    // bootmem_init(e820_address);
 
     //Habilita o teclado
     pic_enable_irq(IRQ_KEYBOARD);

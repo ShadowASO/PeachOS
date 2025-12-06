@@ -33,6 +33,8 @@
 
 #define ALIGN_UP(x, align)   (((x) + ((align) - 1)) & ~((align) - 1))
 
+#define INT32_BYTE_SIZE 4
+
 // Inicializa o early allocator em um range [start, start+size)
 void boot_heap_init(uint32_t start, uint32_t size);
 

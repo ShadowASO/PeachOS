@@ -250,6 +250,12 @@ void kheap_init(uint32_t region_start,
 
     /* todas as unidades na faixa [heap_start_addr, heap_end_addr) começam livres */
     heap_free_units = heap_current_total_units();
+
+    /* Marcar a área de memória física do heap_bitmap */
+    pmm_mark_region_used((uintptr_t)heap_bitmap, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
+
+    /* Marcar a área de memória física do heap_bitmap */
+    pmm_mark_region_used((uintptr_t)heap_alloc_units, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
 }
 
 /* ----------------------------------------------------
