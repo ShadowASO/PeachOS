@@ -52,7 +52,7 @@ all: dirs $(BINDIR)/boot1.bin $(BINDIR)/boot2.bin $(BINDIR)/kernel.bin
 	dd if=$(BINDIR)/boot1.bin  >> $(BINDIR)/os.bin
 	dd if=$(BINDIR)/boot2.bin  >> $(BINDIR)/os.bin
 	dd if=$(BINDIR)/kernel.bin >> $(BINDIR)/os.bin
-	dd if=/dev/zero bs=512 count=100 >> $(BINDIR)/os.bin
+	dd if=/dev/zero bs=512 count=200 >> $(BINDIR)/os.bin
 
 dirs:
 	mkdir -p $(BINDIR) $(BUILDDIR)

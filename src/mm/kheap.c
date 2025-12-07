@@ -110,7 +110,8 @@ static bool heap_expand(uint32_t bytes_needed)
     uintptr_t end_vaddr = vaddr + delta;
 
     while (vaddr < end_vaddr) {
-        uintptr_t phys = pmm_alloc_frame();
+        //uintptr_t phys = pmm_alloc_frame();
+         uintptr_t phys = (uintptr_t)boot_early_kalloc(PAGE_SIZE, PAGE_SIZE);
         if (phys == 0) {
             /* falha ao obter página física: idealmente reverter o que já foi
              * mapeado nesta expansão, mas por simplicidade retornamos false. */
@@ -256,6 +257,9 @@ void kheap_init(uint32_t region_start,
 
     /* Marcar a área de memória física do heap_bitmap */
     pmm_mark_region_used((uintptr_t)heap_alloc_units, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
+
+    /* Marcar a área de memória física do heap */
+    pmm_mark_region_used((uintptr_t)heap_region_start, kheap_initial_size);
 }
 
 /* ----------------------------------------------------

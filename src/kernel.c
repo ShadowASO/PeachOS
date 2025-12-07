@@ -12,6 +12,7 @@
 #include "./mm/pmm.h"
 #include "./mm/kheap.h"
 #include "./mm/mm_setup.h"
+#include "./cpu/cpu.h"
 
 /*
 [ heap_region_start ] ----------------------+
@@ -33,10 +34,6 @@
 
 */
 
-extern uint32_t _kernel_phys_base;
-extern uint32_t _kernel_virt_base;
-
-
 
 void kernel_main(void *e820_address) {
     // Agora você já está executando em 0xC0xxxxxx
@@ -55,7 +52,7 @@ void kernel_main(void *e820_address) {
 
     kprintf("\nkernel size=0x%x", get_kernel_size());
     kprintf("\nkernel begin=0x%x", get_kernel_ini_vmm());      
-    kprintf("\nbitmap end=0x%x", pmm_bitmap_end_addr());
+    kprintf("\nkernel end=0x%x", get_kernel_end_vmm());
 
 
     uintptr_t end1=(uintptr_t)kmalloc(7000);
@@ -74,23 +71,13 @@ void kernel_main(void *e820_address) {
 
     pag1=(uintptr_t)kpage_alloc();
     kprintf("\nkpage_alloc=%p", pag1);
-
-    
-    // kprintf("\nphys=%p virt=%p\n", &_kernel_phys_base, &_kernel_virt_base);
-    //  kprintf("\nphys=%p virt=%p\n", get_kernel_ini_phys(), get_kernel_ini_vmm());
+        
 
     //Habilita o teclado
     pic_enable_irq(IRQ_KEYBOARD);
 
-    // int a,b;
-    // a=1;
-    // b=0;        
-    // a=a/b;
     
-    while (1)
-    {
-        /* code */
-    }
+    _wait();
     
 
     return;

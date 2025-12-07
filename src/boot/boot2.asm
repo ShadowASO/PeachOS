@@ -100,7 +100,7 @@ load32:
                           ; para o endereço 0x0100000.
                           ; Como estamos inserindo um setor adicional pára o boot, o kernel estará no
                           ; Setor 3 do disco.
-    mov ecx, 100        ; Total: total de setores para ler
+    mov ecx, 200        ; Total: total de setores para ler
     mov edi, 0x0100000  ; Endereço na memória para carregar os setores / 1MB
     call ata_lba_read
 

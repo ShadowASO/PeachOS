@@ -1,11 +1,12 @@
 #include "bootmem.h"
 #include "../cpu/e820.h"
+#include "../klib/kprintf.h"
 
 
-static uint32_t boot_heap_start = 0;
-static uint32_t boot_heap_end   = 0;
-static uint32_t boot_heap_curr  = 0;
-static bool     boot_heap_inited = false;
+static uint32_t boot_early_start = 0;
+static uint32_t boot_early_end   = 0;
+static uint32_t boot_early_curr  = 0;
+static bool     boot_early_inited = false;
 
 //Início do kernel
 extern uint32_t _kernel_ini_vmm;
@@ -62,7 +63,7 @@ size_t get_memory_size() {
 size_t get_kernel_size() {
     return kernel_size;
 }
-void boot_heap_init(uint32_t start, uint32_t size) {
+void boot_early_init(uint32_t start, uint32_t size) {
     // Garante alinhamento do início
     uint32_t aligned_start = ALIGN_UP(start, boot_HEAP_ALIGNMENT);
     uint32_t aligned_end   = start + size;
@@ -70,71 +71,97 @@ void boot_heap_init(uint32_t start, uint32_t size) {
     if (aligned_end <= aligned_start) {
         // Range inválido, em produção você pode chamar panic()
         // ou logar erro.
-        boot_heap_inited = false;
+        boot_early_inited = false;
         return;
     }
 
-    boot_heap_start  = aligned_start;
-    boot_heap_curr   = aligned_start;
-    boot_heap_end    = aligned_end;
-    boot_heap_inited = true;
+    boot_early_start  = aligned_start;
+    boot_early_curr   = aligned_start;
+    boot_early_end    = aligned_end;
+    boot_early_inited = true;
+
+    debug_early_init() ;
+
 }
 
-void* boot_kmalloc(size_t size) {
-    if (!boot_heap_inited || size == 0) {
+void debug_early_init() {
+    kprintf("\nboot_early_start=0x%x", boot_early_start);   
+    kprintf("\nboot_early_curr=0x%x", boot_early_curr);   
+    kprintf("\nboot_early_end=0x%x", boot_early_end);   
+   
+}
+
+void* boot_early_kalloc(size_t size, size_t align) {
+    if (!boot_early_inited || size == 0 ) {
         return NULL;
     }
+    
 
-    uint32_t aligned_size = ALIGN_UP((uint32_t)size, boot_HEAP_ALIGNMENT);
-
+    //uint32_t aligned_size = ALIGN_UP((uint32_t)size, boot_HEAP_ALIGNMENT);
+    uintptr_t curr = boot_early_curr;
+    // alinhamento
+    uintptr_t aligned = (curr + (align - 1)) & ~(align - 1);
+    
     // Verifica se cabe
-    if (boot_heap_curr + aligned_size > boot_heap_end) {
+    if (aligned + size > boot_early_end) {
         // Sem espaço na early heap
+        
+        kprintf("\nsize=0x%x", size); 
+        kprintf("\nboot_early_curr=0x%x", boot_early_curr); 
+        kprintf("\nboot_early_curr aligned=0x%x", aligned ); 
+        kprintf("\nboot_early_curr aligned + size=0x%x", aligned + size); 
+        kprintf("\nboot_early_end=0x%x", boot_early_end); 
+
         return NULL;
     }
 
-    void* ptr = (void*)boot_heap_curr;
-    boot_heap_curr += aligned_size;
+    void* ptr = (void*)aligned;
+    boot_early_curr = aligned + size;
     return ptr;
 }
 
-void* boot_kcalloc(size_t n, size_t size) {
-    size_t total = n * size;
-    void* ptr = boot_kmalloc(total);
+void* boot_early_kcalloc(size_t size, size_t align) {
+    //size_t total = n * size;
+    void* ptr = boot_early_kalloc(size, align);
     if (!ptr) {
         return NULL;
     }
 
     // Zera a memória
     uint8_t* p = (uint8_t*)ptr;
-    for (size_t i = 0; i < total; i++) {
+    for (size_t i = 0; i < size; i++) {
         p[i] = 0;
     }
     return ptr;
 }
 
-void boot_kfree(void* ptr) {
+void boot_early_kfree(void* ptr) {
     // Early allocator não suporta free de blocos individuais.
     // Você pode deixar isso como no-op ou, se quiser, adicionar
     // algum tipo de assert/log de uso indevido.
     (void)ptr;
 }
 
-void boot_heap_reset(void) {
-    if (!boot_heap_inited) return;
-    boot_heap_curr = boot_heap_start;
+void boot_early_reset(void) {
+    if (!boot_early_inited) return;
+    boot_early_curr = boot_early_start;
 }
 
-uint32_t boot_heap_used(void) {
-    if (!boot_heap_inited) return 0;
-    return boot_heap_curr - boot_heap_start;
+uint32_t boot_early_used(void) {
+    if (!boot_early_inited) return 0;
+    return boot_early_curr - boot_early_start;
 }
 
-uint32_t boot_heap_total(void) {
-    if (!boot_heap_inited) return 0;
-    return boot_heap_end - boot_heap_start;
+uint32_t boot_early_total(void) {
+    if (!boot_early_inited) return 0;
+    return boot_early_end - boot_early_start;
 }
 
-bool boot_heap_is_initialized(void) {
-    return boot_heap_inited;
+bool boot_early_is_initialized(void) {
+    return boot_early_inited;
+}
+
+uint32_t boot_early_phys_end(void) {
+    if (!boot_early_inited) return 0;
+    return boot_early_curr;
 }

@@ -31,29 +31,38 @@
 #define boot_HEAP_ALIGNMENT 8
 #endif
 
+#define PAGE_SIZE 4096
+
 #define ALIGN_UP(x, align)   (((x) + ((align) - 1)) & ~((align) - 1))
 
 #define INT32_BYTE_SIZE 4
 
 // Inicializa o early allocator em um range [start, start+size)
-void boot_heap_init(uint32_t start, uint32_t size);
+//void boot_heap_init(uint32_t start, uint32_t size);
+void boot_early_init(uint32_t start, uint32_t size);
 
 // Aloca 'size' bytes (sem free real)
-void* boot_kmalloc(size_t size);
+//void* boot_kmalloc(size_t size);
+void* boot_early_kalloc(size_t size, size_t align);
 
 // Versão zeroada
-void* boot_kcalloc(size_t n, size_t size);
+//void* boot_kcalloc(size_t n, size_t size);
+void* boot_early_kcalloc(size_t n, size_t size);
 
 // "Libera" (aqui será no-op ou apenas assert de sanidade)
-void  boot_kfree(void* ptr);
+//void  boot_kfree(void* ptr);
+void boot_early_kfree(void* ptr) ;
 
 // Opcional: reseta toda a early heap
-void  boot_heap_reset(void);
+//void  boot_heap_reset(void);
+void boot_early_reset(void) ;
 
 // Consulta de estado (debug/log)
-uint32_t boot_heap_used(void);
-uint32_t boot_heap_total(void);
-bool     boot_heap_is_initialized(void);
+uint32_t boot_early_used(void);
+uint32_t boot_early_total(void);
+bool     boot_early_is_initialized(void);
+uint32_t boot_early_phys_end(void);
+void debug_early_init();
 
 //Memória física
 
