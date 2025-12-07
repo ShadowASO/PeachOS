@@ -6,7 +6,14 @@
 #include <stddef.h>
 
 /* Tamanho de página x86 (4 KiB) */
-//#define PAGE_SIZE 4096
+
+#ifndef PAGE_SIZE
+#define PAGE_SIZE 4096u
+#endif
+
+#ifndef PAGE_TABLE_ENTRIES
+#define PAGE_TABLE_ENTRIES 1024
+#endif
 
 /* Flags de página / diretório */
 #define PAGE_PRESENT   0x001
@@ -62,5 +69,14 @@ uintptr_t vmm_alloc_page(uintptr_t virt, uint32_t flags);
 
 /* Desaloca a página virtual: desmapeia e libera o frame físico. */
 void vmm_free_page(uintptr_t virt);
+
+static inline size_t paging_directory_index(void *virtual_address) {
+    return ((uint32_t)virtual_address /(PAGE_SIZE * PAGE_TABLE_ENTRIES));
+}
+
+static inline size_t paging_table_index(void *virtual_address) {
+    uint32_t index=((uint32_t)virtual_address % (PAGE_SIZE * PAGE_TABLE_ENTRIES) / PAGE_SIZE);
+    return index;
+}
 
 #endif // PAGING_H

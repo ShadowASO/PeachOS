@@ -31,7 +31,9 @@
 #define boot_HEAP_ALIGNMENT 8
 #endif
 
-#define PAGE_SIZE 4096
+#ifndef PAGE_SIZE
+#define PAGE_SIZE 4096u
+#endif
 
 #define ALIGN_UP(x, align)   (((x) + ((align) - 1)) & ~((align) - 1))
 

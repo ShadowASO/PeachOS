@@ -13,6 +13,7 @@
 #include "./mm/kheap.h"
 #include "./mm/mm_setup.h"
 #include "./cpu/cpu.h"
+#include "./mm/page/paging.h"
 
 /*
 [ heap_region_start ] ----------------------+
@@ -71,6 +72,9 @@ void kernel_main(void *e820_address) {
 
     pag1=(uintptr_t)kpage_alloc();
     kprintf("\nkpage_alloc=%p", pag1);
+
+    kprintf("\nDirectory index=%d", paging_directory_index((void *)pag1));
+    kprintf("\nTable index=%d", paging_table_index((void *)pag1));
         
 
     //Habilita o teclado

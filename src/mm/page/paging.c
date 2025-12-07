@@ -219,3 +219,15 @@ void paging_switch_directory(page_directory_t* dir)
     current_directory = dir;
     paging_load_directory(dir->phys_addr);
 }
+int paging_table_entry_set(uint32_t * directory, void * virtual_address, uint32_t frame_addr) {
+
+    size_t directory_index=paging_directory_index(virtual_address);
+    size_t table_index=paging_table_index(virtual_address);
+
+    uint32_t directory_entry =directory[directory_index];
+    uint32_t *table = (uint32_t*)(directory_entry & 0xFFFFF000);
+    table[table_index]=frame_addr;
+
+    return 0;
+
+}
