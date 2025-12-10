@@ -5,8 +5,11 @@
    Binário carregado pelo bootloader em 1 MiB
    ============================================================ */
 
-OUTPUT_FORMAT(binary)
+/* OUTPUT_FORMAT(binary)
+ENTRY(_kernel_start) */
+OUTPUT_FORMAT(elf32-i386)
 ENTRY(_kernel_start)
+
 
 /* ----------------------------------------------------
    Base física e base virtual
@@ -112,7 +115,7 @@ SECTIONS
 
     . = ALIGN(PAGE_SIZE);
     . += PAGE_SIZE;
-    _kerne_end_vmm = .;
+    _kernel_end_vmm = .;
 }
 
 /* ------------------------------------------------------------
@@ -123,14 +126,14 @@ PROVIDE(_kernel_stack_bottom = _kernel_stack_bottom);
 PROVIDE(_kernel_stack_top    = _kernel_stack_top);
 PROVIDE(_kernel_stack_top_phys = _kernel_stack_top - KERNEL_OFFSET);
 
-PROVIDE(page_directory_phys      = page_directory      - KERNEL_OFFSET);
+PROVIDE(page_directory_phys      = page_directory   - KERNEL_OFFSET);
 PROVIDE(page_table_identity_phys = page_table_identity - KERNEL_OFFSET);
 PROVIDE(page_table_high_phys     = page_table_high     - KERNEL_OFFSET);
 
 /* Limites do Kernel */
-PROVIDE(_kernel_ini_phys     = _kernel_ini_vmm     - KERNEL_OFFSET);
+PROVIDE(_kernel_ini_phys     = _kernel_ini_vmm  - KERNEL_OFFSET);
 PROVIDE(_kernel_ini_vmm     = _kernel_ini_vmm );
 
 
-PROVIDE(_kernel_end_phys     = _kerne_end_vmm     - KERNEL_OFFSET);
-PROVIDE(_kernel_end_vmm     = _kerne_end_vmm );
+PROVIDE(_kernel_end_phys     = _kernel_end_vmm  - KERNEL_OFFSET);
+PROVIDE(_kernel_end_vmm     = _kernel_end_vmm );

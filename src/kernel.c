@@ -1,7 +1,8 @@
 #include "kernel.h"
 #include "./terminal/screen.h"
 #include "./klib/string.h"
-#include "./terminal/kprint.h"
+#include "./klib/memory.h"
+//#include "./terminal/kprint.h"
 #include "./pic/pic.h"
 #include "./io/io.h"
 #include "./idt/irq.h"
@@ -14,6 +15,7 @@
 #include "./mm/mm_setup.h"
 #include "./cpu/cpu.h"
 #include "./mm/page/paging.h"
+#include "./drivers/disk/disk.h"
 
 /*
 [ heap_region_start ] ----------------------+
@@ -34,23 +36,7 @@
     +----------------------+  <- heap_max_addr
 
 */
-
-
-void kernel_main(void *e820_address) {
-    // Agora você já está executando em 0xC0xxxxxx
-    video_init();
-
-    //Setup da memória
-    memory_setup(e820_address);
-    
-    //Inicializa a IDT
-    idt_init();
-    
-    //Inicializa o PIC
-    setup_pic();
-
-    kprint("\nHello, World!");
-
+void debug_kernel_main(void) {
     kprintf("\nkernel size=0x%x", get_kernel_size());
     kprintf("\nkernel begin=0x%x", get_kernel_ini_vmm());      
     kprintf("\nkernel end=0x%x", get_kernel_end_vmm());
@@ -75,15 +61,35 @@ void kernel_main(void *e820_address) {
 
     kprintf("\nDirectory index=%d", paging_directory_index((void *)pag1));
     kprintf("\nTable index=%d", paging_table_index((void *)pag1));
-        
+
+}
+char buf[512];
+
+void kernel_main(void *e820_address) {
+    // Agora você já está executando em 0xC0xxxxxx
+    video_init();
+
+    //Setup da memória
+    memory_setup(e820_address);
+    
+    //Inicializa a IDT
+    idt_init();
+    
+    //Inicializa o PIC
+    setup_pic();
+
+    kprintf("\nHello, World!");
+            
 
     //Habilita o teclado
     pic_enable_irq(IRQ_KEYBOARD);
 
+    //for (int i = 0; i < 512; i++) buf[i] = 0xAA;
+    memset(buf, 0xAA, 512);
+    disk_read_sector(0,1,buf);
+    
     
     _wait();
     
-
-    return;
     
 }

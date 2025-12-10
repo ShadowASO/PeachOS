@@ -1,5 +1,4 @@
-#include <stddef.h>
-#include <stdint.h>
+#include "string.h"
 
 size_t kstrlen(const char *str) {
     size_t n=0;
@@ -9,3 +8,17 @@ size_t kstrlen(const char *str) {
     return n;
 }
 
+size_t kstrnlen(const char *str, size_t max){
+    size_t i=0;
+    for(;i<max; i++) {
+        if(str[i]==0)
+            break;
+    }
+    return i;
+}
+bool isdigit(char c){
+    return (c >= 48 && c <= 57);
+}
+int atoi(char c) {
+    return (c - 48);
+}

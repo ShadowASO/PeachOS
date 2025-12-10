@@ -1,18 +1,44 @@
-#----------------- Iniciando em modo debugger
+#----------------- Iniciando em modo debugger do kernel
 
-Executa a aplicação, da seguinte forma:
+# Primeiro, executa a aplicação, da seguinte forma:
 
 $ qemu-system-i386 -s -S -hda ./bin/os.bin
 
-$#---------------  DEBUGGER
-$ gdb
+#--------------- DEBUGANDO
+# Abra um outro terminal, na raiz do projeto: "PeachOS"
 
-$ file build/kernelfull.o 0x100000
+# 1. Executa o GDB
 
-$ add-symbol-file build/kernelfull.o 0x100000
+$ gdb ./bin/kernel.elf
 
-$ target remote localhost:1234
+# 2. Dentro do terminal do GDB
 
-$ break _start
+(gdb) target remote localhost:1234
+(gdb) break kernel_main
+(gdb) continue
 
-$ continue
+(gdb) next
+
+
+#------------------------
+
+O kernel.elf foi linkado com KERNEL_VIRT_BASE = 0xC0000000,
+
+E as seções têm os AT() corretos para o físico 0x00100000,
+
+o GDB já sabe:
+
+Que kernel_main está em algo como 0xC000xxxx.
+
+O QEMU, após habilitar paging, vai reportar EIP nesses endereços.
+
+Os breakpoints vão casar exatamente com o que está sendo executado.
+
+Repare: com essa estratégia você não precisa mais de add-symbol-file manualmente. 
+O kernel.elf já é o executável “oficial” para o GDB.
+
+#--- IMPRIMIR variáveis
+#--conteúdo em HEXA
+$ x/64bx <variavel>
+ou
+$ print <variavel>

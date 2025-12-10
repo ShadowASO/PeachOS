@@ -1,3 +1,11 @@
+# 2. Solução profissional: gerar um kernel.elf e um kernel.bin
+
+# O padrão “profissional” é:
+
+# Gerar um ELF com símbolos para o GDB (kernel.elf).
+
+# Gerar a versão binária crua (kernel.bin) para o bootloader a partir desse ELF (via objcopy).
+
 # Cross-compiler
 CROSS_PATH = ../../cross-compiler/ia32/bin
 
@@ -66,10 +74,17 @@ $(BINDIR)/boot2.bin: $(BOOT2_SRC)
 	nasm -f bin $(BOOT2_SRC) -o $(BINDIR)/boot2.bin
 
 # Gera o kernel (2-pass linking)
-$(BINDIR)/kernel.bin: $(ASM_OBJ) $(C_OBJ)
-	$(LD) -g -relocatable $(ASM_OBJ) $(C_OBJ) -o $(BUILDDIR)/kernelfull.o
-	$(CC) $(FLAGS) -T ./src/linker.ld -o $(BINDIR)/kernel.bin $(BUILDDIR)/kernelfull.o
+# $(BINDIR)/kernel.bin: $(ASM_OBJ) $(C_OBJ)
+# 	$(LD) -g -relocatable $(ASM_OBJ) $(C_OBJ) -o $(BUILDDIR)/kernelfull.o
+# 	$(CC) $(FLAGS) -T ./src/linker.ld -o $(BINDIR)/kernel.bin $(BUILDDIR)/kernelfull.o
 
+# Kernel ELF com símbolos
+$(BINDIR)/kernel.elf: $(ASM_OBJ) $(C_OBJ)
+	$(LD) -g $(ASM_OBJ) $(C_OBJ) -T ./src/linker.ld -o $(BINDIR)/kernel.elf
+
+# Binário cru para o disco
+$(BINDIR)/kernel.bin: $(BINDIR)/kernel.elf
+	objcopy -O binary $(BINDIR)/kernel.elf $(BINDIR)/kernel.bin
 
 
 # ---------------------------------------------------------------------
