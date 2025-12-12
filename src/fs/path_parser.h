@@ -1,22 +1,25 @@
-// disk.h
-#ifndef PATH_PARSER_H
-#define PATH_PARSER_H
+/*
+ * Copyright (C) Daniel McCarthy <daniel@dragonzap.com>
+ * This file is licensed under the GPLv2 license.
+ * To learn how to build this get the kernel development course at https://dragonzap.com/course/developing-a-multithreaded-kernel-from-scratch
+ */
 
-#include <stdint.h>
+#ifndef PATHPARSER_H
+#define PATHPARSER_H
 
 struct path_root
 {
-    int drive_nr;
-    struct path_part * first;    
+    int drive_no;
+    struct path_part* first;
 };
 
 struct path_part
 {
-    const char * part;
-    struct path_part * next;    
+    const char* part;
+    struct path_part* next;
 };
 
-struct path_root * path_parser(const char * path, const char * current_dir_path);
-void path_free(struct path_root * root);
+struct path_root* pathparser_parse(const char* path, const char* current_directory_path);
+void pathparser_free(struct path_root* root);
 
 #endif

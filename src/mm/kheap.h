@@ -76,6 +76,8 @@ void* kmalloc(size_t size);
 /* Aloca `size` bytes com alinhamento explícito em `align` */
 void* kmalloc_aligned(size_t size, size_t align);
 
+void* kzalloc(size_t size);
+
 /* Aloca `n * size` bytes e zera a memória retornada */
 void* kcalloc(size_t n, size_t size);
 

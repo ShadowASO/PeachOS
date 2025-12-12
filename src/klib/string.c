@@ -22,3 +22,5 @@ bool isdigit(char c){
 int atoi(char c) {
     return (c - 48);
 }
+
+

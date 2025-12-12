@@ -16,6 +16,8 @@
 #include "./cpu/cpu.h"
 #include "./mm/page/paging.h"
 #include "./drivers/disk/disk.h"
+#include "./drivers/disk/streamer.h"
+#include "./fs/path.h"
 
 /*
 [ heap_region_start ] ----------------------+
@@ -71,6 +73,8 @@ void kernel_main(void *e820_address) {
 
     //Setup da memória
     memory_setup(e820_address);
+
+    disk_search_and_init();
     
     //Inicializa a IDT
     idt_init();
@@ -85,9 +89,27 @@ void kernel_main(void *e820_address) {
     pic_enable_irq(IRQ_KEYBOARD);
 
     //for (int i = 0; i < 512; i++) buf[i] = 0xAA;
-    memset(buf, 0xAA, 512);
-    disk_read_sector(0,1,buf);
+    kmemset(buf, 0xAA, 512);
+    //disk_read_sector(0,1,buf);
+
+    //****************** */
+    struct disk_stream * stream = diskstreamer_new(0);
+    kprintf("\nstream->disk->type=%d, stream->pos=%d", stream->disk->type, stream->pos);
+
+    int len=disk_read_block(stream->disk,0,1,buf);
     
+   kprintf("\nValor de len=%d",len);
+
+    diskstreamer_seek(stream, 0);
+    kprintf("\nstream->disk->type=%d, stream->pos=%d", stream->disk->type, stream->pos);
+    kmemset(buf, 0xAA, 512);
+
+    
+    len=diskstreamer_read(stream, buf,24);
+    //disk_read_sector(0,1,&c);
+    //disk_read_block(stream->disk,0,1,buf);
+
+    kprintf("\nValor de len=%d",len);
     
     _wait();
     

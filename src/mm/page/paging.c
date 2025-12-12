@@ -27,7 +27,7 @@ static page_table_t* create_page_table(page_directory_t* dir, uint32_t index, ui
 
     // Em identity map, phys == virt
     page_table_t* table = (page_table_t*) table_phys;
-    memset(table, 0, sizeof(page_table_t));
+    kmemset(table, 0, sizeof(page_table_t));
 
     // Ponteiro virtual para facilitar acesso em C
     dir->tables[index] = table;
@@ -156,7 +156,7 @@ static page_directory_t* create_page_directory(void)
     }
 
     page_directory_t* dir = (page_directory_t*) dir_virt;
-    memset(dir, 0, sizeof(page_directory_t));
+    kmemset(dir, 0, sizeof(page_directory_t));
 
     // Enquanto estamos em identity map, virtual == físico
     // CR3 deve receber o endereço físico do array de PDEs (tables_phys)

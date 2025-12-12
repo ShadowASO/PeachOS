@@ -375,6 +375,13 @@ void* kmalloc(size_t size)
     return heap_alloc_units_aligned(units_needed, HEAP_ALIGNMENT, true);
 }
 
+void* kzalloc(size_t size) {
+    void *ptr=kmalloc(size);
+    kmemset(ptr,0, size);
+    return ptr;
+
+}
+
 void* kmalloc_aligned(size_t size, size_t align)
 {
     if (size == 0) {
@@ -402,7 +409,7 @@ void* kcalloc(size_t n, size_t size)
     if (!ptr) {
         return NULL;
     }
-    memset(ptr, 0, total);
+    kmemset(ptr, 0, total);
       
 
     return ptr;

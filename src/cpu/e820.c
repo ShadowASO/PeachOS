@@ -111,7 +111,7 @@ void e820_memory_init(e820_address_t *e820_address)
     kprintf("\ne820: Detectando memory via ...\n");
 
     //limpo o vetor de registros do mapa de memória
-    memset(phys_entries,0, sizeof(phys_entries));
+    kmemset(phys_entries,0, sizeof(phys_entries));
 
     //Atribui o vetor de entradas ao campo da estrutura de memória
     physmap.mem_map=phys_entries;

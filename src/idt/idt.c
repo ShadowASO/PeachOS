@@ -49,7 +49,7 @@ void setup_idt(void)
 	/* Pego a IDT do BSP no vetor idt_percpu[]*/
 	//idt_table = &idt_percpu[id_cpu];
 	//memset(idt_table, 0, sizeof(idt_t));
-    memset(idt_entries,0, sizeof(idt_entries));
+    kmemset(idt_entries,0, sizeof(idt_entries));
 
 	idt_entry_set(0, isr_stub_0, TYPE_TRAP);
     idt_entry_set(1, isr_stub_1, TYPE_TRAP);
