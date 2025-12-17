@@ -74,6 +74,7 @@ void kernel_main(void *e820_address) {
     //Setup da memória
     memory_setup(e820_address);
 
+    //Inicializa a API de acesso ao disco
     disk_search_and_init();
     
     //Inicializa a IDT

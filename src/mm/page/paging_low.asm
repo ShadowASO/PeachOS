@@ -20,3 +20,5 @@ paging_enable:
     or  eax, 0x80000000  ; seta bit PG
     mov cr0, eax
     ret
+
+section .note.GNU-stack noalloc noexec nowrite progbits

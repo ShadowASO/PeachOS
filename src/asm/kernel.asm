@@ -216,3 +216,4 @@ print_debug_hex:  equ $ - KERNEL_OFFSET
     popa
     ret
 
+section .note.GNU-stack noalloc noexec nowrite progbits

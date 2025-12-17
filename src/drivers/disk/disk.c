@@ -69,7 +69,9 @@ static int disk_wait_drq_set(void) {
 
 struct disk_driver disk;
 
-
+/**
+ * Faz a inicialização do disk.
+ */
 void disk_search_and_init(void) {
     kmemset(&disk, 0, sizeof(disk));
     disk.type = DISK_TYPE_REAL;
