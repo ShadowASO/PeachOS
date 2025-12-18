@@ -6,6 +6,7 @@
 #include "../../klib/memory.h"
 #include "../../klib/kprintf.h"
 #include "disk.h"
+#include "../../fs/file.h"
 
 /* Portas padrão do canal primário */
 #define ATA_REG_DATA        0x1F0
@@ -76,6 +77,7 @@ void disk_search_and_init(void) {
     kmemset(&disk, 0, sizeof(disk));
     disk.type = DISK_TYPE_REAL;
     disk.sector_size = DISK_SECTOR_SIZE;
+    disk.filesystem = fs_resolve(&disk);
 }
 
 struct disk_driver* disk_get(int index)

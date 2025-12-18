@@ -7,6 +7,8 @@
 
 size_t kstrlen(const char *str);
 size_t kstrnlen(const char *str, size_t max);
+char * kstrcpy(char *dest, const char * src);
+
 bool isdigit(char c);
 int atoi(char c);
 

@@ -2,7 +2,6 @@
 #include "./terminal/screen.h"
 #include "./klib/string.h"
 #include "./klib/memory.h"
-//#include "./terminal/kprint.h"
 #include "./pic/pic.h"
 #include "./io/io.h"
 #include "./idt/irq.h"
@@ -18,6 +17,7 @@
 #include "./drivers/disk/disk.h"
 #include "./drivers/disk/streamer.h"
 #include "./fs/path.h"
+#include "./fs/file.h"
 
 /*
 [ heap_region_start ] ----------------------+
@@ -75,7 +75,8 @@ void kernel_main(void *e820_address) {
     memory_setup(e820_address);
 
     //Inicializa a API de acesso ao disco
-    disk_search_and_init();
+    //disk_search_and_init();
+    fs_init();
     
     //Inicializa a IDT
     idt_init();
@@ -89,28 +90,9 @@ void kernel_main(void *e820_address) {
     //Habilita o teclado
     pic_enable_irq(IRQ_KEYBOARD);
 
-    //for (int i = 0; i < 512; i++) buf[i] = 0xAA;
-    kmemset(buf, 0xAA, 512);
-    //disk_read_sector(0,1,buf);
-
-    //****************** */
-    struct disk_stream * stream = diskstreamer_new(0);
-    kprintf("\nstream->disk->type=%d, stream->pos=%d", stream->disk->type, stream->pos);
-
-    int len=disk_read_block(stream->disk,0,1,buf);
     
-   kprintf("\nValor de len=%d",len);
-
-    diskstreamer_seek(stream, 0);
-    kprintf("\nstream->disk->type=%d, stream->pos=%d", stream->disk->type, stream->pos);
     kmemset(buf, 0xAA, 512);
-
     
-    len=diskstreamer_read(stream, buf,24);
-    //disk_read_sector(0,1,&c);
-    //disk_read_block(stream->disk,0,1,buf);
-
-    kprintf("\nValor de len=%d",len);
     
     _wait();
     

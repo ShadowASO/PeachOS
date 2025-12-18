@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "../../fs/file.h"
 
 #define DISK_SECTOR_SIZE 512
 #define DISK_TYPE_REAL 0
@@ -13,6 +14,8 @@ typedef uint32_t DISK_TYPE;
 struct disk_driver {
     DISK_TYPE type;
     int32_t sector_size;
+
+    struct filesystem* filesystem;
 };
 
 //int disk_read_sector28(uint32_t lba, uint8_t sectors, void *buf);

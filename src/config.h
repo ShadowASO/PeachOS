@@ -18,4 +18,7 @@
 /* Offset da memória virtual em relação à memória física */
 #define KERNEL_OFFSET   (KERNEL_VIRT_BASE - KERNEL_PHYS_BASE)
 
+#define MAX_FILESYSTEMS 12
+#define MAX_FILEDESCRIPTORS 512
+
 #endif
