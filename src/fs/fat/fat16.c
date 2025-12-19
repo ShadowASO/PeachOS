@@ -3,6 +3,9 @@
 #include "../../status.h"
 #include "../file.h"
 #include "../path_parser.h"
+#include "../../drivers/disk/disk.h"
+#include "../../drivers/disk/streamer.h"
+#include "../../klib/memory.h"
 
 
 
@@ -83,6 +86,20 @@ struct fat_file_descriptor
     uint32_t pos;
 };
 
+struct fat_private
+{
+    struct fat_h header;
+    struct fat_directory root_directory;
+
+    // Used to stream data clusters
+    struct disk_stream *cluster_read_stream;
+    // Used to stream the file allocation table
+    struct disk_stream *fat_read_stream;
+
+    // Used in situations where we stream the directory
+    struct disk_stream *directory_stream;
+};
+
 struct filesystem fat16_fs =
 {
     .resolve = fat16_resolve,
@@ -93,6 +110,67 @@ struct filesystem * fat16_init() {
     kstrcpy(fat16_fs.name, "FAT16");
     return &fat16_fs;
 }
+
+static void fat16_init_private(struct disk_driver *disk, struct fat_private *fs_private)
+{
+    kmemset(fs_private, 0, sizeof(struct fat_private));
+    fs_private->cluster_read_stream = diskstreamer_new(disk->id);
+    fs_private->fat_read_stream = diskstreamer_new(disk->id);
+    fs_private->directory_stream = diskstreamer_new(disk->id);
+}
+
+int fat16_sector_to_absolute(struct disk_driver *disk, int sector)
+{
+    return sector * disk->sector_size;
+}
+
+int fat16_get_total_items_for_directory(struct disk_driver *disk, uint32_t directory_start_sector)
+{
+    struct fat_directory_item item;
+    struct fat_directory_item empty_item;
+    kmemset(&empty_item, 0, sizeof(empty_item));
+
+    struct fat_private *fat_private = disk->fs_private;
+
+    int res = 0;
+    int i = 0;
+    int directory_start_pos = directory_start_sector * disk->sector_size;
+    struct disk_stream *stream = fat_private->directory_stream;
+    if (diskstreamer_seek(stream, directory_start_pos) != PEACHOS_ALL_OK)
+    {
+        res = -EIO;
+        goto out;
+    }
+
+    while (1)
+    {
+        if (diskstreamer_read(stream, &item, sizeof(item)) != PEACHOS_ALL_OK)
+        {
+            res = -EIO;
+            goto out;
+        }
+
+        if (item.filename[0] == 0x00)
+        {
+            // We are done
+            break;
+        }
+
+        // Is the item unused
+        if (item.filename[0] == 0xE5)
+        {
+            continue;
+        }
+
+        i++;
+    }
+
+    res = i;
+
+out:
+    return res;
+}
+
 
 int fat16_resolve(struct disk_driver *disk) {
     return 0;

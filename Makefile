@@ -51,6 +51,15 @@ ASM_OBJ := $(patsubst ./src/%.asm,./build/%.o,$(ASM_SRC))
 # ★ ADICIONADO — inclui kernel_low.asm
 ASM_OBJ +=  $(KERNEL_ASM_OBJ)
 
+#Configuração do QEMU
+QEMU_FLAGS = -s -S \
+	-machine pc,accel=kvm \
+	-cpu host \
+	-m 4096 \
+	-drive file=$(BINDIR)/os.bin,format=raw,if=ide,index=0,media=disk \
+	-boot c \
+	-display gtk \
+	-serial stdio
 # ---------------------------------------------------------------------
 # TARGETS PRINCIPAIS
 # ---------------------------------------------------------------------
@@ -117,7 +126,8 @@ $(KERNEL_ASM_OBJ): $(KERNEL_ASM)
 # ---------------------------------------------------------------------
 
 run: 	
-	qemu-system-i386 -s -S -hda $(BINDIR)/os.bin
+#	qemu-system-i386 -s -S -hda $(BINDIR)/os.bin
+	qemu-system-i386 $(QEMU_FLAGS)
 
 run64:
 	qemu-system-x86_64 -s -S -hda $(BINDIR)/os.bin

@@ -13,9 +13,15 @@ typedef uint32_t DISK_TYPE;
 
 struct disk_driver {
     DISK_TYPE type;
-    int32_t sector_size;
+    int sector_size;
+
+     // The id of the disk
+    int id;
 
     struct filesystem* filesystem;
+
+    // The private data of our filesystem
+    void* fs_private;
 };
 
 //int disk_read_sector28(uint32_t lba, uint8_t sectors, void *buf);
