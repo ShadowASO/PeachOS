@@ -79,6 +79,9 @@ void disk_search_and_init(void) {
     disk.sector_size = DISK_SECTOR_SIZE;
     disk.id = 0;
     disk.filesystem = fs_resolve(&disk);
+
+    //kprintf("\ndisk.filesystem=%p", disk.filesystem);
+    //kprintf("\ndisk.sector_size=%d", disk.sector_size);
 }
 
 struct disk_driver* disk_get(int index)

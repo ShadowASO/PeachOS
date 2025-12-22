@@ -1,8 +1,8 @@
 #include "idt.h"
 #include "../klib/memory.h"
-#include "./terminal/screen.h"
-#include "./terminal/kprint.h"
-#include "kernel.h"
+#include "../terminal/screen.h"
+#include "../terminal/kprint.h"
+#include "../kernel.h"
 #include "isr.h"
 
 

@@ -26,13 +26,14 @@ struct disk_driver;
 //Funções ponteiros
 
 typedef void * (*FS_OPEN_FUNCTION)(struct disk_driver* disk, struct path_part * path, FILE_MODE mode);
-
+typedef int (*FS_READ_FUNCTION)(struct disk_driver* disk, void* private_data, uint32_t size, uint32_t nmemb, char* out);
 typedef int (*FS_RESOLVE_FUNCTION)(struct disk_driver* disk);
 
 struct filesystem {
     // Filesystem should return zero from resolve if the provided disk is using its filesystem
     FS_RESOLVE_FUNCTION resolve;
-    FS_OPEN_FUNCTION open;    
+    FS_OPEN_FUNCTION open;   
+    FS_READ_FUNCTION read; 
     char name[20];
 };
 
@@ -53,5 +54,7 @@ void fs_init();
 int fopen(const char* filename, const char* mode_str);
 void fs_insert_filesystem(struct filesystem* filesystem);
 struct filesystem* fs_resolve(struct disk_driver* disk);
+
+int fread(void* ptr, uint32_t size, uint32_t nmemb, int fd);
 
 #endif

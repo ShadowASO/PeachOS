@@ -5,7 +5,8 @@
  */
 
 #include "path_parser.h"
-#include "kernel.h"
+#include "../kernel.h"
+#include "../klib/ctype.h"
 #include "../klib/string.h"
 #include "../mm/kheap.h"
 #include "../klib/memory.h"
@@ -50,34 +51,39 @@ static struct path_root* pathparser_create_root(int drive_number)
 
 static const char* pathparser_get_path_part(const char** path)
 {
-    char* result_path_part = kmalloc(PATH_MAX);
-    if (!result_path_part)
+    // 1) Descobre o tamanho do token (até '/' ou '\0')
+    const char* start = *path;
+    int len = 0;
+
+    while (start[len] != '/' && start[len] != 0x00)
+        len++;
+
+    // Token vazio? (ex: "0:/" ou "0://")
+    if (len == 0)
     {
-        return NULL;
+        // Se está em '/', consome pra evitar loop travado
+        if (**path == '/')
+            *path += 1;
+        return 0;
     }
 
-    int i = 0;
-    while(**path != '/' && **path != 0x00)
-    {
-        result_path_part[i] = **path;
-        *path += 1;
-        i++;
-    }
+    // 2) Aloca exatamente o necessário (+1 pro '\0')
+    char* result = kmalloc(len + 1);
+    if (!result)
+        return 0;
 
+    // 3) Copia e termina com '\0'
+    kmemcpy(result, *path, len);
+    result[len] = 0x00;
+
+    // 4) Avança o ponteiro do path
+    *path += len;
     if (**path == '/')
-    {
-        // Skip the forward slash to avoid problems
         *path += 1;
-    }
 
-    if(i == 0)
-    {
-        kfree(result_path_part);
-        result_path_part = 0;
-    }
-
-    return result_path_part;
+    return result;
 }
+
 
 struct path_part* pathparser_parse_path_part(struct path_part* last_part, const char** path)
 {

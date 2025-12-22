@@ -1,11 +1,11 @@
 #include "mm_setup.h"
-#include "./klib/kprintf.h"
-#include "./mm/bootmem.h"
-#include "./mm/pmm.h"
-#include "./mm/kheap.h"
+#include "../klib/kprintf.h"
+#include "../mm/bootmem.h"
+#include "../mm/pmm.h"
+#include "../mm/kheap.h"
 #include "./page/paging.h"
 #include "./../idt/idt.h"
-#include "./cpu/cpu.h"
+#include "../cpu/cpu.h"
 
 void memory_setup(e820_address_t *e820_address) {
    

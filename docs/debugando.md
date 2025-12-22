@@ -42,3 +42,8 @@ O kernel.elf já é o executável “oficial” para o GDB.
 $ x/64bx <variavel>
 ou
 $ print <variavel>
+
+#Verificando as seções do kernel
+
+../../cross-compiler/ia32/bin/i686-pc-linux-gnu-readelf -S ./bin/kernel.elf
+

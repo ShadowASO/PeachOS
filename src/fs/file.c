@@ -14,6 +14,7 @@
 #include "../status.h"
 #include "../kernel.h"
 #include "./fat/fat16.h"
+#include "../klib/error.h"
 
 
 struct filesystem* filesystems[MAX_FILESYSTEMS];
@@ -35,14 +36,12 @@ static struct filesystem** fs_get_free_filesystem()
 
 void fs_insert_filesystem(struct filesystem* filesystem)
 {
-    struct filesystem** fs;
-    fs = fs_get_free_filesystem();
+    struct filesystem** fs = fs_get_free_filesystem();
     if (!fs)
     {
-        kprintf("Problem inserting filesystem"); 
-        while(1) {}
+        kprintf("Problem inserting filesystem");
+        while (1) {}
     }
-
     *fs = filesystem;
 }
 
@@ -63,57 +62,46 @@ void fs_init()
     fs_load();
 }
 
-// static void file_free_descriptor(struct file_descriptor* desc)
-// {
-//     file_descriptors[desc->index-1] = 0x00;
-//     kfree(desc);
-// }
 
 static int file_new_descriptor(struct file_descriptor** desc_out)
 {
-    int res = -ENOMEM;
+    if (!desc_out) return -EINVARG;
+
     for (int i = 0; i < MAX_FILEDESCRIPTORS; i++)
     {
         if (file_descriptors[i] == 0)
         {
             struct file_descriptor* desc = kzalloc(sizeof(struct file_descriptor));
-            // Descriptors start at 1
-            desc->index = i + 1;
+            if (!desc)
+                return -ENOMEM;
+
+            desc->index = i + 1; // descritores começam em 1
             file_descriptors[i] = desc;
             *desc_out = desc;
-            res = 0;
-            break;
+            return 0;
         }
     }
 
-    return res;
+    return -ENOMEM; // ou -ENFILE se você tiver
 }
 
 static struct file_descriptor* file_get_descriptor(int fd)
 {
-    if (fd <= 0 || fd >= MAX_FILEDESCRIPTORS)
-    {
+    // Válidos: 1..MAX_FILEDESCRIPTORS
+    if (fd <= 0 || fd > MAX_FILEDESCRIPTORS)
         return 0;
-    }
 
-    // Descriptors start at 1
-    int index = fd - 1;
-    return file_descriptors[index];
+    return file_descriptors[fd - 1];
 }
 
 struct filesystem* fs_resolve(struct disk_driver* disk)
 {
-    struct filesystem* fs = 0;
     for (int i = 0; i < MAX_FILESYSTEMS; i++)
     {
-        if (filesystems[i] != 0 && filesystems[i]->resolve(disk) == 0)
-        {
-            fs = filesystems[i];
-            break;
-        }
+        if (filesystems[i] && filesystems[i]->resolve(disk) == 0)
+            return filesystems[i];
     }
-
-    return fs;
+    return 0;
 }
 
 FILE_MODE file_get_mode_by_string(const char* str)
@@ -136,6 +124,128 @@ FILE_MODE file_get_mode_by_string(const char* str)
 
 int fopen(const char* filename, const char* mode_str)
 {
-    
-    return -EIO;
+    int res = 0;
+    struct disk_driver* disk = 0;
+    FILE_MODE mode = FILE_MODE_INVALID;
+    void* descriptor_private_data = 0;
+    struct file_descriptor* desc = 0;
+    struct path_root* root_path = 0;
+
+    if (!filename || !mode_str)
+        return 0;
+
+    root_path = pathparser_parse(filename, 0);
+    if (!root_path)
+    {
+        kprintf("\n[fopen] pathparser_parse falhou");
+        res = -EINVARG;
+        goto out;
+    }
+
+    if (!root_path->first)
+    {
+        kprintf("\n[fopen] caminho sem arquivo/parte: %s", filename);
+        res = -EINVARG;
+        goto out;
+    }
+
+    disk = disk_get(root_path->drive_no);
+    if (!disk)
+    {
+        kprintf("\n[fopen] disk_get(%d) falhou", root_path->drive_no);
+        res = -EIO;
+        goto out;
+    }
+
+    // Se filesystem ainda não foi resolvido, resolva agora
+    if (!disk->filesystem)
+    {
+        disk->filesystem = fs_resolve(disk);
+        if (!disk->filesystem)
+        {
+            kprintf("\n[fopen] nenhum filesystem suportado no disco %d", root_path->drive_no);
+            res = -EFSNOTUS;
+            goto out;
+        }
+    }
+
+    mode = file_get_mode_by_string(mode_str);
+    if (mode == FILE_MODE_INVALID)
+    {
+        kprintf("\n[fopen] modo invalido: %s", mode_str);
+        res = -EINVARG;
+        goto out;
+    }
+
+    descriptor_private_data = disk->filesystem->open(disk, root_path->first, mode);
+    if (ISERR(descriptor_private_data))
+    {
+        res = ERROR_I(descriptor_private_data);
+        kprintf("\n[fopen] open() falhou: %d", res);
+        goto out;
+    }
+
+    res = file_new_descriptor(&desc);
+    if (res < 0)
+    {
+        kprintf("\n[fopen] sem descritores: %d", res);
+        goto out;
+    }
+
+    desc->filesystem = disk->filesystem;
+    desc->private_data = descriptor_private_data;
+    desc->disk = disk;
+
+    res = desc->index;
+
+out:
+    // Sempre liberar o path parseado
+    if (root_path)
+    {
+        pathparser_free(root_path);
+        root_path = 0;
+    }
+
+    // Em erro, limpar o que foi alocado/aberto
+    if (res < 0)
+    {
+        // Se você tiver close no FS, o correto é fechar aqui.
+        // Ex: disk->filesystem->close(descriptor_private_data);
+        descriptor_private_data = 0;
+
+        if (desc)
+        {
+            // Se você quiser liberar desc, reative file_free_descriptor.
+            // Por ora, evita “slot perdido” caso tenha sido reservado.
+            file_descriptors[desc->index - 1] = 0;
+            kfree(desc);
+            desc = 0;
+        }
+
+        // mantendo sua convenção: fopen não retorna negativo
+        return 0;
+    }
+
+    return res;
+}
+
+int fread(void* ptr, uint32_t size, uint32_t nmemb, int fd)
+{
+    int res = 0;
+    if (size == 0 || nmemb == 0 || fd < 1)
+    {
+        res = -EINVARG;
+        goto out;
+    }
+
+    struct file_descriptor* desc = file_get_descriptor(fd);
+    if (!desc)
+    {
+        res = -EINVARG;
+        goto out;
+    }
+
+    res = desc->filesystem->read(desc->disk, desc->private_data, size, nmemb, (char*) ptr);
+out:
+    return res;
 }

@@ -37,6 +37,9 @@
     |        ...           |
     +----------------------+  <- heap_max_addr
 
+    Para a execução, é necessário que o kvm esteja carregado. Existe um pequeno script para
+    carregar e descarregar o kvm. O kvm precisa ser descarregado para que o VirtualBox fun-
+    cione. Script: kvm-toggle.sh
 */
 void debug_kernel_main(void) {
     kprintf("\nkernel size=0x%x", get_kernel_size());
@@ -77,6 +80,9 @@ void kernel_main(void *e820_address) {
     //Inicializa a API de acesso ao disco
     //disk_search_and_init();
     fs_init();
+
+    // Search and initialize the disks
+    disk_search_and_init();
     
     //Inicializa a IDT
     idt_init();
@@ -85,6 +91,11 @@ void kernel_main(void *e820_address) {
     setup_pic();
 
     kprintf("\nHello, World!");
+
+    int fd = fopen("0:/hello.txt","r");
+    if(fd) {
+        kprintf("\nO arquivo hello.txt aberto");
+    }
             
 
     //Habilita o teclado

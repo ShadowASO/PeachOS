@@ -9,8 +9,10 @@
 # Cross-compiler
 CROSS_PATH = ../../cross-compiler/ia32/bin
 
-LD = $(CROSS_PATH)/i686-pc-linux-gnu-ld
-CC = $(CROSS_PATH)/i686-pc-linux-gnu-gcc
+CC      := $(CROSS_PATH)/i686-pc-linux-gnu-gcc
+LD      := $(CROSS_PATH)/i686-pc-linux-gnu-ld
+OBJCOPY := $(CROSS_PATH)/i686-pc-linux-gnu-objcopy
+READELF := $(CROSS_PATH)/i686-pc-linux-gnu-readelf
 
 # Diretórios principais
 BINDIR   = ./bin
@@ -18,12 +20,22 @@ BUILDDIR = ./build
 
 INCLUDES = -I./src
 
-FLAGS = -g -ffreestanding -falign-jumps -falign-functions \
--falign-labels -falign-loops -fstrength-reduce -fomit-frame-pointer \
--finline-functions -Wno-unused-function -fno-builtin -Werror \
--Wno-unused-label -Wno-cpp -Wno-unused-parameter -nostdlib \
--nostartfiles -nodefaultlibs -Wall -O0 -Iinc
+# Flags de compilação (kernel freestanding)
+CFLAGS := -g -O0 -Wall -Werror \
+	-ffreestanding -fno-builtin \
+	-fno-omit-frame-pointer \
+	-fno-asynchronous-unwind-tables -fno-unwind-tables \
+	-fno-pic -fno-plt \
+	-m32 -march=i686 \
+	-std=gnu99 \
+	-Wno-unused-function -Wno-unused-label -Wno-unused-parameter -Wno-cpp
 
+# Flags do assembler (NASM)
+ASFLAGS := -g
+
+# Flags de link (ELF do kernel)
+LDSCRIPT := ./src/linker.ld
+LDFLAGS  := -m elf_i386 -T $(LDSCRIPT) -nostdlib -z noexecstack
 # ---------------------------------------------------------------------
 #   DETECÇÃO AUTOMÁTICA DE FONTES
 # ---------------------------------------------------------------------
@@ -60,22 +72,26 @@ QEMU_FLAGS = -s -S \
 	-boot c \
 	-display gtk \
 	-serial stdio
+
 # ---------------------------------------------------------------------
 # TARGETS PRINCIPAIS
 # ---------------------------------------------------------------------
 
-all: dirs $(BINDIR)/boot1.bin $(BINDIR)/boot2.bin $(BINDIR)/kernel.bin 
+.PHONY: all dirs clean run run64 inspect
+
+all: dirs $(BINDIR)/boot1.bin $(BINDIR)/boot2.bin $(BINDIR)/kernel.bin $(BINDIR)/kernel.elf
 	rm -f $(BINDIR)/os.bin
 	dd if=$(BINDIR)/boot1.bin  >> $(BINDIR)/os.bin
 	dd if=$(BINDIR)/boot2.bin  >> $(BINDIR)/os.bin
 	dd if=$(BINDIR)/kernel.bin >> $(BINDIR)/os.bin
-#	dd if=/dev/zero bs=512 count=100 >> $(BINDIR)/os.bin	
 	dd if=/dev/zero bs=1048576 count=16 >> $(BINDIR)/os.bin
-	
+
+
 copyfile:
 	@sudo mkdir -p /mnt/d
 	sudo mount -t vfat ./bin/os.bin /mnt/d
 	sudo cp ./hello.txt /mnt/d
+	sudo cp ./hello2.txt /mnt/d
 	sudo umount /mnt/d
 
 dirs:
@@ -89,19 +105,14 @@ $(BINDIR)/boot1.bin: $(BOOT1_SRC)
 $(BINDIR)/boot2.bin: $(BOOT2_SRC)
 	nasm -f bin $(BOOT2_SRC) -o $(BINDIR)/boot2.bin
 
-# Gera o kernel (2-pass linking)
-# $(BINDIR)/kernel.bin: $(ASM_OBJ) $(C_OBJ)
-# 	$(LD) -g -relocatable $(ASM_OBJ) $(C_OBJ) -o $(BUILDDIR)/kernelfull.o
-# 	$(CC) $(FLAGS) -T ./src/linker.ld -o $(BINDIR)/kernel.bin $(BUILDDIR)/kernelfull.o
-
 # Kernel ELF com símbolos
 $(BINDIR)/kernel.elf: $(ASM_OBJ) $(C_OBJ)
-	$(LD) -g $(ASM_OBJ) $(C_OBJ) -T ./src/linker.ld -o $(BINDIR)/kernel.elf
+	$(LD) $(LDFLAGS) -o $@ $(ASM_OBJ) $(C_OBJ)
 
 # Binário cru para o disco
 $(BINDIR)/kernel.bin: $(BINDIR)/kernel.elf
-	objcopy -O binary $(BINDIR)/kernel.elf $(BINDIR)/kernel.bin
-
+#	objcopy -O binary $(BINDIR)/kernel.elf $(BINDIR)/kernel.bin
+	$(OBJCOPY) --strip-debug -O binary $< $@
 
 # ---------------------------------------------------------------------
 # REGRAS GENÉRICAS
@@ -109,21 +120,24 @@ $(BINDIR)/kernel.bin: $(BINDIR)/kernel.elf
 
 ./build/%.o: ./src/%.c
 	mkdir -p $(dir $@)
-	$(CC) $(INCLUDES) $(FLAGS) -std=gnu99 -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 ./build/%.o: ./src/%.asm
 	mkdir -p $(dir $@)
-	nasm -f elf -g $< -o $@
+	nasm -f elf $(ASFLAGS) $< -o $@
 
 # Kernel.asm (src/asm/kernel.asm → build/asm/kernel.o)
 $(KERNEL_ASM_OBJ): $(KERNEL_ASM)
 	mkdir -p $(dir $@)
-	nasm -f elf -g $< -o $@
-
+	nasm -f elf $(ASFLAGS) $< -o $@
 
 # ---------------------------------------------------------------------
-# EXECUÇÃO EM QEMU
+# UTILITÁRIOS
 # ---------------------------------------------------------------------
+
+inspect: $(BINDIR)/kernel.elf
+	$(READELF) -S $(BINDIR)/kernel.elf
+	$(READELF) -l $(BINDIR)/kernel.elf
 
 run: 	
 #	qemu-system-i386 -s -S -hda $(BINDIR)/os.bin
@@ -137,6 +151,4 @@ run64:
 # ---------------------------------------------------------------------
 
 clean:
-	rm -rf $(BINDIR)/*.bin
-	rm -rf $(BINDIR)/os.bin
-	rm -rf $(BUILDDIR)
+	rm -rf $(BINDIR) $(BUILDDIR)

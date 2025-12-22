@@ -6,10 +6,11 @@
 
 #include "streamer.h"
 #include "../../mm/kheap.h"
-#include "config.h"
+#include "../../config.h"
 #include <stdbool.h>
 #include "disk.h"
 #include "../../klib/kprintf.h"
+#include "../../terminal/kprint.h"
 
 struct disk_stream* diskstreamer_new(int disk_id)
 {
@@ -58,6 +59,8 @@ int diskstreamer_read(struct disk_stream* stream, void* out, int total)
         // Lê exatamente 1 setor (512 bytes)
         int res = disk_read_block(stream->disk, lba, 1, buf);
 
+        //kprintf("\nres disk=%d",res);
+
         // Erro real
         if (res < 0) return res;
 
@@ -76,7 +79,7 @@ int diskstreamer_read(struct disk_stream* stream, void* out, int total)
         stream->pos += take;
         remaining -= take;
     }
-
+    //kprint_hex_dump_lines(out,total, 16);
     // Sucesso: retornamos quantos bytes o caller pediu (e foram entregues)
     return total;
 }

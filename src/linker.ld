@@ -63,6 +63,8 @@ SECTIONS
         *(.rodata)
         *(.rodata.*)
     }
+
+   
     /* --------------------------------------------------------
        .data
        -------------------------------------------------------- */
@@ -113,6 +115,16 @@ SECTIONS
         _kernel_stack_top = .;
     }
 
+    /DISCARD/ :
+   {
+    *(.eh_frame .eh_frame.*)
+    *(.eh_frame_hdr)
+    *(.gcc_except_table .gcc_except_table.*)
+    *(.comment)
+    *(.note .note.*)
+   }
+
+   
     . = ALIGN(PAGE_SIZE);
     . += PAGE_SIZE;
     _kernel_end_vmm = .;

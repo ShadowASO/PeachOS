@@ -40,3 +40,27 @@ void kprint_hex(uint32_t value)
         kputhex_nibble(nibble, atrib);
     }
 }
+
+void kprint_hex_dump_lines(const void* data, size_t size, size_t bytes_per_line)
+{
+    if (!data || size == 0 || bytes_per_line == 0)
+        return;
+
+    const uint8_t* bytes = (const uint8_t*)data;
+    char atrib = get_text_video_atrib(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+
+    for (size_t i = 0; i < size; i++) {
+        uint8_t b = bytes[i];
+
+        kputhex_nibble((b >> 4) & 0xF, atrib);
+        kputhex_nibble(b & 0xF, atrib);
+        kputchar(' ');
+
+        if ((i + 1) % bytes_per_line == 0)
+            kputchar('\n');
+    }
+
+    if (size % bytes_per_line != 0)
+        kputchar('\n');
+}
+

@@ -21,7 +21,7 @@ _start:
 OEMIdentifier           db 'PEACHOS '
 BytesPerSector          dw 0x200
 SectorsPerCluster       db 0x80
-ReservedSectors         dw 200
+ReservedSectors         dw 200  ;Evita que sobreponha o kernel
 FATCopies               db 0x02
 RootDirEntries          dw 0x40
 NumSectors              dw 0x00
@@ -40,7 +40,7 @@ VolumeID                dd 0xD105
 VolumeIDString          db 'PEACHOS BOO'
 SystemIDString          db 'FAT16   '
 
-;------------------------------------
+
 
 stage0:
     jmp 0x00:stage1
