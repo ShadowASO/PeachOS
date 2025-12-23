@@ -79,12 +79,13 @@ QEMU_FLAGS = -s -S \
 
 .PHONY: all dirs clean run run64 inspect
 
-all: dirs $(BINDIR)/boot1.bin $(BINDIR)/boot2.bin $(BINDIR)/kernel.bin $(BINDIR)/kernel.elf
+all: dirs $(BINDIR)/boot1.bin $(BINDIR)/boot2.bin $(BINDIR)/kernel.bin $(BINDIR)/kernel.elf 
 	rm -f $(BINDIR)/os.bin
 	dd if=$(BINDIR)/boot1.bin  >> $(BINDIR)/os.bin
 	dd if=$(BINDIR)/boot2.bin  >> $(BINDIR)/os.bin
 	dd if=$(BINDIR)/kernel.bin >> $(BINDIR)/os.bin
 	dd if=/dev/zero bs=1048576 count=16 >> $(BINDIR)/os.bin
+	$(MAKE) copyfile
 
 
 copyfile:

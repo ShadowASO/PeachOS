@@ -36,3 +36,8 @@ c) criei repositório para o projeto do PeachOS;
 # -----------------------------------------------------------------------------
 a) revisando o Kernel Development e fazendo ajustes no código do bootloader,
 a partir da compreensão adquirida no modo real e seu endereçamento;
+
+# -----------------------------------------------------------------------------
+#             Em 23-12-2025: Versão 1.0.0                                    
+# -----------------------------------------------------------------------------
+a) concluída a implementação do filesystem e do driver do FAT16;

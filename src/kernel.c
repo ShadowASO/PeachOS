@@ -95,6 +95,31 @@ void kernel_main(void *e820_address) {
     int fd = fopen("0:/hello.txt","r");
     if(fd) {
         kprintf("\nO arquivo hello.txt aberto");
+        char buf[14];
+        fseek(fd,2,SEEK_SET);
+        fread(buf,13,1,fd);
+        buf[13]=0x00;
+        kprintf("\nConteudo: %s", buf);
+        struct file_stat s;
+        fstat(fd,&s);
+        kprintf("\nSize=%d",s.filesize);
+        fclose(fd);
+        
+    }
+    int fd2 = fopen("0:/hello2.txt","r");
+    if(fd2) {
+        kprintf("\nO arquivo hello2.txt aberto");
+        char buf2[64];
+        //fseek(fd2,2,SEEK_SET);
+        int i=fread(buf2,63,1,fd2);
+        buf2[i]=0x00;
+        kprintf("\nLidos: %d", i);
+        kprintf("\nConteudo: %s", buf2);
+        struct file_stat s2;
+        fstat(fd2,&s2);
+        kprintf("\nSize=%d",s2.filesize);
+        fclose(fd2);
+        
     }
             
 

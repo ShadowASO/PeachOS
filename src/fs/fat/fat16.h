@@ -19,74 +19,107 @@ typedef unsigned int FAT_ITEM_TYPE;
 #define FAT_ITEM_TYPE_FILE 1
 
 // Fat directory entry attributes bitmask
-#define FAT_FILE_READ_ONLY 0x01
-#define FAT_FILE_HIDDEN 0x02
-#define FAT_FILE_SYSTEM 0x04
-#define FAT_FILE_VOLUME_LABEL 0x08
-#define FAT_FILE_SUBDIRECTORY 0x10
-#define FAT_FILE_ARCHIVED 0x20
-#define FAT_FILE_DEVICE 0x40
-#define FAT_FILE_RESERVED 0x80
-
-
-struct fat_header
-{
-    uint8_t short_jmp_ins[3];
-    uint8_t oem_identifier[8];
-    uint16_t bytes_per_sector;
-    uint8_t sectors_per_cluster;
-    uint16_t reserved_sectors;
-    uint8_t fat_copies;
-    uint16_t root_dir_entries;
-    uint16_t number_of_sectors;
-    uint8_t media_type;
-    uint16_t sectors_per_fat;
-    uint16_t sectors_per_track;
-    uint16_t number_of_heads;
-    uint32_t hidden_setors;
-    uint32_t sectors_big;
-} __attribute__((packed));
-
-
-struct fat_header_extended
-{
-    uint8_t drive_number;
-    uint8_t win_nt_bit;
-    uint8_t signature;
-    uint32_t volume_id;
-    uint8_t volume_id_string[11];
-    uint8_t system_id_string[8];
-} __attribute__((packed));
-
-
-struct fat_h
-{
-    struct fat_header primary_header;
-    union fat_h_e {
-        struct fat_header_extended extended_header;
-    } shared;
+// #define FAT_FILE_READ_ONLY 0x01
+// #define FAT_FILE_HIDDEN 0x02
+// #define FAT_FILE_SYSTEM 0x04
+// #define FAT_FILE_VOLUME_LABEL 0x08
+// #define FAT_FILE_SUBDIRECTORY 0x10
+// #define FAT_FILE_ARCHIVED 0x20
+// #define FAT_FILE_DEVICE 0x40
+// #define FAT_FILE_RESERVED 0x80
+// Atributos relevantes
+enum {
+    FAT_ATTR_READ_ONLY = 0x01,
+    FAT_ATTR_HIDDEN    = 0x02,
+    FAT_ATTR_SYSTEM    = 0x04,
+    FAT_ATTR_VOLUME_ID = 0x08,
+    FAT_ATTR_DIRECTORY = 0x10,
+    FAT_ATTR_ARCHIVE   = 0x20,
+    FAT_ATTR_LONG_NAME = 0x0F
 };
 
-struct fat_directory_item
+
+// -----------------------------------------------------------------------------
+// BPB/EBPB FAT16 (layout padrão do boot sector)
+// -----------------------------------------------------------------------------
+typedef struct bpb_header
 {
-    uint8_t filename[8];
-    uint8_t ext[3];
-    uint8_t attribute;
-    uint8_t reserved;
-    uint8_t creation_time_tenths_of_a_sec;
-    uint16_t creation_time;
-    uint16_t creation_date;
-    uint16_t last_access;
-    uint16_t high_16_bits_first_cluster;
-    uint16_t last_mod_time;
-    uint16_t last_mod_date;
-    uint16_t low_16_bits_first_cluster;
-    uint32_t filesize;
+    uint8_t  jmp[3];
+    char     oem[8];
+
+    uint16_t bytes_per_sector;      // BPB_BytsPerSec
+    uint8_t  sectors_per_cluster;   // BPB_SecPerClus
+    uint16_t reserved_sectors;      // BPB_RsvdSecCnt
+    uint8_t  fat_count;             // BPB_NumFATs
+    uint16_t root_entry_count;      // BPB_RootEntCnt
+    uint16_t total_sectors_16;      // BPB_TotSec16
+    uint8_t  media;                 // BPB_Media
+    uint16_t sectors_per_fat_16;    // BPB_FATSz16
+    uint16_t sectors_per_track;     // BPB_SecPerTrk
+    uint16_t head_count;            // BPB_NumHeads
+    uint32_t hidden_sectors;        // BPB_HiddSec
+    uint32_t total_sectors_32;      // BPB_TotSec32
+
+} __attribute__((packed)) bpb_header_t;
+
+// EBPB FAT16
+struct ebpb_ext
+{
+    uint8_t  drive_number;          // BS_DrvNum
+    uint8_t  reserved1;             // BS_Reserved1
+    uint8_t  boot_signature;        // BS_BootSig (0x29)
+    uint32_t volume_id;             // BS_VolID
+    char     volume_label[11];      // BS_VolLab
+    char     fs_type[8];            // BS_FilSysType ("FAT16   ")
+
+} __attribute__((packed));
+
+// -----------------------------------------------------------------------------
+// Info derivado do BPB (endereços LBA de FAT/ROOT/DATA)
+// -----------------------------------------------------------------------------
+typedef struct {
+    //struct bpb_header bpb;
+
+    uint32_t fat_start_lba;     // início da FAT1
+    uint32_t root_start_lba;    // início do RootDir
+    uint32_t data_start_lba;    // início da Data Area (cluster 2)
+    uint32_t root_sectors_size;      // tamanho do root em setores
+} fat16_ctx_t;
+struct fat_h
+{
+    struct bpb_header bpb;
+    union fat_h_e {
+        struct ebpb_ext ext_header;
+    } shared;
+    
+};
+
+
+
+// -----------------------------------------------------------------------------
+// Directory entry FAT (32 bytes)
+// -----------------------------------------------------------------------------
+struct fat_dir_entry
+{
+    char     name[8];     // 8.3 (padded with spaces)
+    char ext[3];
+    uint8_t  attr;
+    uint8_t  nt_res;
+    uint8_t  crt_time_tenth;
+    uint16_t crt_time;
+    uint16_t crt_date;
+    uint16_t lst_acc_date;
+    uint16_t fst_clus_hi;  // sempre 0 no FAT16
+    uint16_t wrt_time;
+    uint16_t wrt_date;
+    uint16_t fst_clus_lo;  // FirstCluster
+    uint32_t file_size;
+
 } __attribute__((packed));
 
 struct fat_directory
 {
-    struct fat_directory_item *item;
+    struct fat_dir_entry *item;
     int total;
     int sector_pos;
     int ending_sector_pos;
@@ -95,17 +128,25 @@ struct fat_directory
 struct fat_item
 {
     union {
-        struct fat_directory_item *item;
+        struct fat_dir_entry *item;
         struct fat_directory *directory;
     };
 
     FAT_ITEM_TYPE type;
 };
 
+// ------------------------------------------------------------
+// 1) Atualize o descriptor (fat16.h)
+// ------------------------------------------------------------
 struct fat_file_descriptor
 {
     struct fat_item *item;
     uint32_t pos;
+
+    // cache para leitura sequencial
+    uint16_t first_cluster;          // cluster inicial do arquivo (do dir entry)
+    uint16_t current_cluster;        // cluster que contém 'pos' (ou onde estamos lendo)
+    uint32_t current_cluster_index;  // 0 = first_cluster, 1 = próximo, etc.
 };
 
 //Layout
@@ -121,12 +162,18 @@ struct fat_private
 
     // Used in situations where we stream the directory
     struct disk_stream *directory_stream;
+
+    fat16_ctx_t ctx;
 };
 
 
 struct filesystem* fat16_init();
 int fat16_resolve(struct disk_driver * disk);
 void * fat16_open(struct disk_driver * disk, struct path_part *path, FILE_MODE mode);
+int fat16_read(struct disk_driver *disk, void *descriptor, uint32_t size, uint32_t nmemb, char *out_ptr);
+int fat16_seek(void *private, uint32_t offset, FILE_SEEK_MODE seek_mode);
+int fat16_stat(struct disk_driver* disk, void* private, struct file_stat* stat);
+int fat16_close(void* private);
 
 
 #endif

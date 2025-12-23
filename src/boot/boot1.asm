@@ -20,23 +20,23 @@ _start:
 ; FAT16 Header
 OEMIdentifier           db 'PEACHOS '
 BytesPerSector          dw 0x200
-SectorsPerCluster       db 0x80
-ReservedSectors         dw 200  ;Evita que sobreponha o kernel
+SectorsPerCluster       db 0x4 ;0x80
+ReservedSectors         dw 100; 200  ;Evita que sobreponha o kernel
 FATCopies               db 0x02
-RootDirEntries          dw 0x40
-NumSectors              dw 0x00
+RootDirEntries          dw 0x0200 ;512
+NumSectors              dw 0x0000
 MediaType               db 0xF8
-SectorsPerFat           dw 0x100
-SectorsPerTrack         dw 0x20
-NumberOfHeads           dw 0x40
-HiddenSectors           dd 0x00
-SectorsBig              dd 0x773594
+SectorsPerFat           dw 0x100 ;256
+SectorsPerTrack         dw 0x003f ;63
+NumberOfHeads           dw 0x00FF ;0x40
+HiddenSectors           dd 0x0000
+SectorsBig              dd 0x00008000   ;0x773594
 
 ; Extended BPB (Dos 4.0)
 DriveNumber             db 0x80
 WinNTBit                db 0x00
 Signature               db 0x29
-VolumeID                dd 0xD105
+VolumeID                dd 0x0000D105
 VolumeIDString          db 'PEACHOS BOO'
 SystemIDString          db 'FAT16   '
 
