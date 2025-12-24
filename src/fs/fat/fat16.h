@@ -19,14 +19,7 @@ typedef unsigned int FAT_ITEM_TYPE;
 #define FAT_ITEM_TYPE_FILE 1
 
 // Fat directory entry attributes bitmask
-// #define FAT_FILE_READ_ONLY 0x01
-// #define FAT_FILE_HIDDEN 0x02
-// #define FAT_FILE_SYSTEM 0x04
-// #define FAT_FILE_VOLUME_LABEL 0x08
-// #define FAT_FILE_SUBDIRECTORY 0x10
-// #define FAT_FILE_ARCHIVED 0x20
-// #define FAT_FILE_DEVICE 0x40
-// #define FAT_FILE_RESERVED 0x80
+
 // Atributos relevantes
 enum {
     FAT_ATTR_READ_ONLY = 0x01,
@@ -35,7 +28,9 @@ enum {
     FAT_ATTR_VOLUME_ID = 0x08,
     FAT_ATTR_DIRECTORY = 0x10,
     FAT_ATTR_ARCHIVE   = 0x20,
-    FAT_ATTR_LONG_NAME = 0x0F
+    FAT_ATTR_LONG_NAME = 0x0F,
+    FAT_ATTR_DEVICE    = 0x40,
+    FAT_ATTR_RESERVED  = 0x80
 };
 
 

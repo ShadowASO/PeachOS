@@ -1,4 +1,5 @@
-section .asm
+;section .asm
+section .text
 
 extern int21h_handler
 extern no_interrupt_handler

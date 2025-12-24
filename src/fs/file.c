@@ -20,6 +20,10 @@
 struct filesystem* filesystems[MAX_FILESYSTEMS];
 struct file_descriptor* file_descriptors[MAX_FILEDESCRIPTORS];
 
+/*
+Retorna o endereço do primeiro elemento vazio do vetor filesystems, 
+significando que ele está disponível.
+*/
 static struct filesystem** fs_get_free_filesystem()
 {
     int i = 0;
@@ -33,7 +37,10 @@ static struct filesystem** fs_get_free_filesystem()
 
     return 0;
 }
-
+/*
+Obtém um elemento vazio do vetor filesystems e atribuem a ele
+o endereço do novo filesystem a ser inserido.
+*/
 void fs_insert_filesystem(struct filesystem* filesystem)
 {
     struct filesystem** fs = fs_get_free_filesystem();
@@ -44,7 +51,10 @@ void fs_insert_filesystem(struct filesystem* filesystem)
     }
     *fs = filesystem;
 }
-
+/*
+Carrega os filesystems dispóníveis no sistema. Avaliar outra forma de fazer
+o carregamento e evitar sua fixação no código.
+*/
 static void fs_static_load()
 {
     fs_insert_filesystem(fat16_init());
@@ -68,7 +78,9 @@ static void file_free_descriptor(struct file_descriptor* desc)
     kfree(desc);
 }
 
-
+/**
+ * Cria e Devolve um descriptor livre
+ */
 
 static int file_new_descriptor(struct file_descriptor** desc_out)
 {
@@ -91,7 +103,9 @@ static int file_new_descriptor(struct file_descriptor** desc_out)
 
     return -ENOMEM; // ou -ENFILE se você tiver
 }
-
+/**
+ * Devolve o descritor indicado pelo "fd"
+ */
 static struct file_descriptor* file_get_descriptor(int fd)
 {
     // Válidos: 1..MAX_FILEDESCRIPTORS
@@ -100,7 +114,10 @@ static struct file_descriptor* file_get_descriptor(int fd)
 
     return file_descriptors[fd - 1];
 }
-
+/*
+Esta rotina é chamada pelo "disk_driver" e tem a função de procurar um
+filesystem compatível com o disco. 
+*/
 struct filesystem* fs_resolve(struct disk_driver* disk)
 {
     for (int i = 0; i < MAX_FILESYSTEMS; i++)

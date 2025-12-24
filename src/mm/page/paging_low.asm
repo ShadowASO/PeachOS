@@ -1,4 +1,5 @@
-section .asm
+;section .asm
+section .text
 
 ; paging.asm - rotinas auxiliares para CR3 e CR0
 [BITS 32]

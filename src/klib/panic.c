@@ -1,5 +1,6 @@
 #include "panic.h"
 #include "../idt/exceptions.h"
+#include "../cpu/cpu.h"
 
 
 static void dump_regs(int_stack_t *r)
@@ -30,19 +31,20 @@ static void dump_regs(int_stack_t *r)
 
 
 __attribute__((noreturn))
-void panic(const char *msg, int_stack_t *regs)
+//void panic(const char *msg, int_stack_t *regs)
+void panic(const char *msg)
 {
     kprint("\n*** KERNEL PANIC ***\n");
     kprint(msg);
     kprint("\n");
 
-    dump_regs(regs);
+    //dump_regs(regs);
 
     kprint("\nSistema travado.\n");
 
-    for (;;) {
-        __asm__ __volatile__("cli; hlt");
-    }
+    _wait();
+    __builtin_unreachable(); // opcional, ajuda o otimizador/diagnóstico
+
 }
 
 
@@ -64,9 +66,9 @@ void panic_exception(uint32_t vector, int_stack_t *regs)
         dump_regs(regs);
     }
 
-    for (;;) {
-        __asm__ __volatile__("cli; hlt");
-    }
+   _wait();
+
+   __builtin_unreachable();  // opcional, ajuda o otimizador/diagnóstico
 }
 
 

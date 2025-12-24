@@ -57,7 +57,8 @@
 #define CR0_CD             BIT(CR0_CD_BIT)
 #define CR0_PG             BIT(CR0_PG_BIT)
 
-extern void _wait(void);
-extern void _pause(void);
+__attribute__((noreturn)) void _wait(void);
+
+__attribute__((noreturn)) void _pause(void);
 
 #endif

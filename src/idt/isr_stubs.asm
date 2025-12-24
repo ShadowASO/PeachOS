@@ -8,8 +8,8 @@
 ; Interrupt descriptor table
 
 
-
-section .data
+section .text
+; section .data
 ;align 16
 ;global idt64, pointer ;idt64.pointer
 

@@ -58,10 +58,15 @@ C_OBJ := $(patsubst ./src/%.c,./build/%.o,$(C_SRC))
 ASM_SRC := $(filter-out $(BOOT1_SRC) $(BOOT2_SRC)  $(KERNEL_ASM) , \
            $(wildcard ./src/*.asm ./src/*/*.asm ./src/*/*/*.asm))
 
-ASM_OBJ := $(patsubst ./src/%.asm,./build/%.o,$(ASM_SRC))
 
-# ★ ADICIONADO — inclui kernel_low.asm
-ASM_OBJ +=  $(KERNEL_ASM_OBJ)
+# ATENÇÃO: A ordem de linkagem dos objetos assembly é muito importante!
+# O kernel.asm deve ser o primeiro código assembly a ser linkado, para não 
+# alterar as posições de memória, pois são calculadas fixamente nos labels.
+# se a ordem não for observada, o código assembly dos demais arquivos precisa 
+# declarar com a "section .asm" e essa section precisa ser acrescida no link.ld,
+# após a section .text.
+ASM_OBJ :=  $(KERNEL_ASM_OBJ)
+ASM_OBJ += $(patsubst ./src/%.asm,./build/%.o,$(ASM_SRC))
 
 #Configuração do QEMU
 QEMU_FLAGS = -s -S \

@@ -38,6 +38,17 @@ a) revisando o Kernel Development e fazendo ajustes no código do bootloader,
 a partir da compreensão adquirida no modo real e seu endereçamento;
 
 # -----------------------------------------------------------------------------
-#             Em 23-12-2025: Versão 1.0.0                                    
+#             Em 23-12-2025: Versão 1.0.13                                   
 # -----------------------------------------------------------------------------
 a) concluída a implementação do filesystem e do driver do FAT16;
+b) feitos deiversos ajustes e correções;
+
+# -----------------------------------------------------------------------------
+#             Em 24-12-2025: Versão 1.0.13                                   
+# -----------------------------------------------------------------------------
+a) corrigido o bug que obrigava a criar uma section .asm para todo o código
+assembly acrescentado ao sistema. A ordem de linkagem impõe que o código do
+kernel.asm seja linkado antes dos demais, pois ele possui posições fixas que
+são calculadas manualmente. Se o código assembly dos demais objetos vier antes
+do kernel.asm, muda as posições de memória. Eliminei a section .asm do código,
+após ajustar a ordem de linkagem no Makefile

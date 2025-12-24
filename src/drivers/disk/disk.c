@@ -33,6 +33,9 @@
 /* Se quiser evitar loop infinito, use um timeout simples */
 #define ATA_MAX_POLL  1000000
 
+
+struct disk_driver disk;
+
 static inline uint8_t disk_status(void) {
     return __read_portb(ATA_REG_STATUS);
 }
@@ -68,7 +71,6 @@ static int disk_wait_drq_set(void) {
     }
 }
 
-struct disk_driver disk;
 
 /**
  * Faz a inicialização do disk.
@@ -80,8 +82,6 @@ void disk_search_and_init(void) {
     disk.id = 0;
     disk.filesystem = fs_resolve(&disk);
 
-    //kprintf("\ndisk.filesystem=%p", disk.filesystem);
-    //kprintf("\ndisk.sector_size=%d", disk.sector_size);
 }
 
 struct disk_driver* disk_get(int index)
@@ -90,40 +90,6 @@ struct disk_driver* disk_get(int index)
     return &disk;
 }
 
-int disk_read_block(struct disk_driver *idisk, uint32_t lba, size_t total, void *buf)
-{
-    if (!idisk) {
-        kprintf("\nERROR - disk driver nulo");
-        return -1;
-    }
-
-    // Se quiser debug seguro:
-    // kprintf("\nidisk=%p type=%u sector_size=%d lba=%u total=%u",
-    //        idisk, (unsigned)idisk->type, (int)idisk->sector_size,
-    //        (unsigned)lba, (unsigned)total);
-
-
-    uint8_t* p = (uint8_t*)buf;
-    uint32_t cur_lba = lba;
-    size_t remaining = total;
-
-    while (remaining > 0) {
-        size_t chunk = remaining > 256 ? 256 : remaining;
-        int r = disk_read_sector28(cur_lba, (uint16_t)chunk, p);
-        if (r != 0) return r; // mantém códigos negativos/erros
-
-        cur_lba += (uint32_t)chunk;
-        p += (chunk * DISK_SECTOR_SIZE);
-        remaining -= chunk;
-    }
-
-    // ✅ bytes lidos
-    return (int)(total * DISK_SECTOR_SIZE);
-}
-
-/* ---------------------------------------------------------
- * Helpers de status
- * --------------------------------------------------------- */
 
 /* ---------------------------------------------------------
  * Leitura LBA28, múltiplos setores (até 256)
@@ -163,5 +129,36 @@ int disk_read_sector28(uint32_t lba, uint16_t sectors, void *buf)
     }
 
     return 0;
+}
+
+int disk_read_block(struct disk_driver *idisk, uint32_t lba, size_t total, void *buf)
+{
+    if (!idisk) {
+        kprintf("\nERROR - disk driver nulo");
+        return -1;
+    }
+
+    // Se quiser debug seguro:
+    // kprintf("\nidisk=%p type=%u sector_size=%d lba=%u total=%u",
+    //        idisk, (unsigned)idisk->type, (int)idisk->sector_size,
+    //        (unsigned)lba, (unsigned)total);
+
+
+    uint8_t* p = (uint8_t*)buf;
+    uint32_t cur_lba = lba;
+    size_t remaining = total;
+
+    while (remaining > 0) {
+        size_t chunk = remaining > 256 ? 256 : remaining;
+        int r = disk_read_sector28(cur_lba, (uint16_t)chunk, p);
+        if (r != 0) return r; // mantém códigos negativos/erros
+
+        cur_lba += (uint32_t)chunk;
+        p += (chunk * DISK_SECTOR_SIZE);
+        remaining -= chunk;
+    }
+
+    // ✅ bytes lidos
+    return (int)(total * DISK_SECTOR_SIZE);
 }
 

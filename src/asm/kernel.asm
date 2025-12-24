@@ -116,6 +116,7 @@ _kernel_start:
 ; Rotina de criação das tabelas de página
 ; =====================================================================
 init_paging: equ $ - KERNEL_OFFSET
+;init_paging: 
 
     ; -------------------------------------------------
     ; Zera o diretório (físico)
@@ -172,6 +173,7 @@ init_paging: equ $ - KERNEL_OFFSET
 ; Rotina de debug (escrita física, sem paging)
 ; =====================================================================
 print_debug: equ $ - KERNEL_OFFSET
+;print_debug: 
     pusha
     mov ebx, msg_debug
     mov edx, 0xb8000
@@ -189,13 +191,15 @@ print_debug: equ $ - KERNEL_OFFSET
     popa
     ret
 
-msg_debug: equ $ - KERNEL_OFFSET
+; msg_debug: equ $ - KERNEL_OFFSET
+msg_debug: 
          db "Debug - OK",0
 
 ; =====================================================================
 ; Debug (escrita física, sem paging) - Imprime números e emdereços HEXA
 ; =====================================================================
-print_debug_hex:  equ $ - KERNEL_OFFSET
+; print_debug_hex:  equ $ - KERNEL_OFFSET
+print_debug_hex:  
     pusha
      mov edx, 0xb8000
     mov ecx, 8         ; 8 dígitos hex

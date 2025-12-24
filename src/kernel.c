@@ -111,7 +111,7 @@ void kernel_main(void *e820_address) {
         kprintf("\nO arquivo hello2.txt aberto");
         char buf2[64];
         //fseek(fd2,2,SEEK_SET);
-        int i=fread(buf2,63,1,fd2);
+        int i=fread(buf2,30,1,fd2);
         buf2[i]=0x00;
         kprintf("\nLidos: %d", i);
         kprintf("\nConteudo: %s", buf2);

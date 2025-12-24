@@ -23,7 +23,7 @@ BytesPerSector          dw 0x200
 SectorsPerCluster       db 0x4 ;0x80
 ReservedSectors         dw 100; 200  ;Evita que sobreponha o kernel
 FATCopies               db 0x02
-RootDirEntries          dw 0x0200 ;512
+RootDirEntries          dw 0x0040 ;64
 NumSectors              dw 0x0000
 MediaType               db 0xF8
 SectorsPerFat           dw 0x100 ;256

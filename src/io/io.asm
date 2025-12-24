@@ -1,4 +1,5 @@
-section .asm
+;section .asm
+section .text
 
 global __write_portb
 global __write_portw
