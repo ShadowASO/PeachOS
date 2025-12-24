@@ -44,11 +44,11 @@ a) concluída a implementação do filesystem e do driver do FAT16;
 b) feitos deiversos ajustes e correções;
 
 # -----------------------------------------------------------------------------
-#             Em 24-12-2025: Versão 1.0.13                                   
+#             Em 24-12-2025: Versão 1.0.14                                  
 # -----------------------------------------------------------------------------
-a) corrigido o bug que obrigava a criar uma section .asm para todo o código
+a) corrigido o bug que obrigava a criar uma "section .asm" para todo o código
 assembly acrescentado ao sistema. A ordem de linkagem impõe que o código do
 kernel.asm seja linkado antes dos demais, pois ele possui posições fixas que
-são calculadas manualmente. Se o código assembly dos demais objetos vier antes
-do kernel.asm, muda as posições de memória. Eliminei a section .asm do código,
-após ajustar a ordem de linkagem no Makefile
+são calculadas manualmente. Se o código assembly dos demais objetos for inserido
+antes dele, as posições de memória são modificadas. Con segui Eliminei section
+ajustando a ordem de linkagem no Makefile;

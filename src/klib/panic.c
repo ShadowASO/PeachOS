@@ -31,7 +31,6 @@ static void dump_regs(int_stack_t *r)
 
 
 __attribute__((noreturn))
-//void panic(const char *msg, int_stack_t *regs)
 void panic(const char *msg)
 {
     kprint("\n*** KERNEL PANIC ***\n");

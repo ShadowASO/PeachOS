@@ -11,7 +11,6 @@
  * Mostra mensagem, dump de registradores e trava o sistema.
  */
 __attribute__((noreturn))
-// void panic(const char *msg, int_stack_t *regs);
 void panic(const char *msg);
 
 /**

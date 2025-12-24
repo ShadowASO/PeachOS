@@ -63,8 +63,9 @@ stage1:
     ; Carregar o segundo estágio a partir do disco
     ; Vamos assumir:
     ;  - Segundo estágio começa no setor 2 (CHS: cilindro 0, cabeça 0, setor 2)
-    ;  - Tamanho: 4 setores (ajuste conforme o tamanho do seu stage2)
+    ;  - Tamanho: 2 setores (ajuste conforme o tamanho do seu stage2)
     ;  - Endereço de carga: 0000:8000 (0x8000 físico)
+    ; (*) No endereçamento CHS (Cylinder–Head–Sector) da BIOS, o primeiro setor é o setor 1, nunca o setor 0.
     ; ----------------------------------------------------------------
     mov ax, 0x0000
     mov es, ax

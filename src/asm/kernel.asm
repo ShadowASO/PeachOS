@@ -1,11 +1,12 @@
 
 [BITS 32]
 
+
 %include "./src/asm/config.inc"
 
 global _kernel_start
 
-;extern do_e820
+
 extern kernel_main
 extern video_init
 extern idt_init
@@ -49,7 +50,7 @@ _kernel_start:
     mov ss, ax
    
     ; -----------------------------------------------------------------
-    ; Usa a pilha física contida n kernel e fornecida pelo linker
+    ; Usa a pilha física contida no kernel e fornecida pelo linker
     ; -----------------------------------------------------------------
     mov esp, _kernel_stack_top_phys
     mov ebp, esp
@@ -57,16 +58,73 @@ _kernel_start:
     ; -----------------------------------------------------------------
     ; Debug: exibir endereço de qualquer rótulo ou rotina (paging desativada)
     ; ----------------------------------------------------------------- 
-    ;mov eax, init_paging   
-    ;mov ebx, print_debug_hex
-    ;call ebx
-             
-    ;jmp $
+    ; mov eax, high_entry  
+    ; mov ebx, print_debug_hex
+    ; call ebx             
+    ; hlt
+    
     ; =================================================================
     ; INICIALIZA PAGING (execução física)
+    ; (*) Inseri o corpo da rotina aqui, mas tenho uma versão pronta que 
+    ; Poderia ser chamda usando o comando abaixo. A inclusão no corpo do
+    ; código elimina preocupação com o cálculo do label para fins de cha-
+    ; mada(jump):
+    ;
+    ; mov eax, init_paging    
+    ; call eax
     ; =================================================================
-    mov eax, init_paging    
-    call eax
+
+    ; -------------------------------------------------
+    ; Zera o pageframe do diretório (físico)
+    ; -------------------------------------------------
+    mov edi, page_directory_phys
+    mov ecx, 1024
+    xor eax, eax
+    rep stosd
+
+    ; -------------------------------------------------
+    ; Identity map 0–4 MiB
+    ; -------------------------------------------------
+    mov edi, page_table_identity_phys
+    mov eax, 0x00000003      ; RW + PRESENT, base = 0
+    mov ecx, 1024
+
+    .fill_identity:
+        mov [edi], eax
+        add eax, 0x1000
+        add edi, 4
+        loop .fill_identity
+
+    ; PDE[0] = identity PT
+    mov eax, page_table_identity_phys
+    or eax, 0x3
+    mov ebx, page_directory_phys
+    mov [ebx + 0*4], eax
+
+    ; -------------------------------------------------
+    ; High-half mapeando kernel físico para 0xC0000000 - 0xC0400000(4MB)
+    ; -------------------------------------------------
+    mov edi, page_table_high_phys
+    mov eax, _kernel_phys_base
+    ;mov eax, 0x0  ; correção de um erro que deu muito trabalho
+    or eax, 0x3
+    mov ecx, 1024
+
+    .fill_high:
+        mov [edi], eax
+        add eax, 0x1000
+        add edi, 4
+        loop .fill_high
+
+        ; PDE[768] = page_table_high
+        mov eax, page_table_high_phys
+        or eax, 0x3
+        mov ebx, page_directory_phys
+        mov [ebx + PDE_HIGH*4], eax
+
+    ; =================================================================
+    ; **********    FIM DO PAGGIN    ****************
+    ; =================================================================
 
     ; -----------------------------------------------------------------
     ; Carrega CR3 com endereço físico do diretório de páginas
@@ -113,10 +171,15 @@ _kernel_start:
     jmp .hang
 
 ; =====================================================================
-; Rotina de criação das tabelas de página
+; Rotina de criação das tabelas de página(Não está sendo usada-24/12/2025)
+; Uso:
+    ;mov eax, init_paging    
+    ;call eax
+;(*) Eu mudei o projeto e inseri o código no antigo ponto de chamada. 
+;isso evita problemas de endereçamento e o único salto é a chamada a
+;kernel_main. Vou manter o código aqui apenas para documentação. 
 ; =====================================================================
 init_paging: equ $ - KERNEL_OFFSET
-;init_paging: 
 
     ; -------------------------------------------------
     ; Zera o diretório (físico)
@@ -172,8 +235,8 @@ init_paging: equ $ - KERNEL_OFFSET
 ; =====================================================================
 ; Rotina de debug (escrita física, sem paging)
 ; =====================================================================
-print_debug: equ $ - KERNEL_OFFSET
-;print_debug: 
+ print_debug: equ $ - KERNEL_OFFSET
+
     pusha
     mov ebx, msg_debug
     mov edx, 0xb8000
@@ -191,15 +254,16 @@ print_debug: equ $ - KERNEL_OFFSET
     popa
     ret
 
-; msg_debug: equ $ - KERNEL_OFFSET
-msg_debug: 
+msg_debug: equ $ - KERNEL_OFFSET
+
          db "Debug - OK",0
 
 ; =====================================================================
 ; Debug (escrita física, sem paging) - Imprime números e emdereços HEXA
 ; =====================================================================
-; print_debug_hex:  equ $ - KERNEL_OFFSET
-print_debug_hex:  
+ print_debug_hex:  equ $ - KERNEL_OFFSET
+
+
     pusha
      mov edx, 0xb8000
     mov ecx, 8         ; 8 dígitos hex
