@@ -11,7 +11,7 @@
 
 CODE_SEG equ gdt_code-gdt_start
 DATA_SEG equ gdt_data-gdt_start
-KERNEL_SETOR equ 3
+KERNEL_SETOR_INI equ 3
 
 ; ------------------------------------------------------------
 ; Área fixa em 0x9000:0000 para informações do E820
@@ -95,12 +95,12 @@ load32:
     out 0x92, al
     
     ;Carrega o kernel com o  LBA
-    ;mov eax, 1           ; Setor: número do setor de início (0 é o bootloader)
-    mov eax, KERNEL_SETOR ; Setor INICIAL: Esta constante possui o número do primeiro setor do disco/mídia a ser copiado
-                          ; para o endereço 0x0100000. O bootloader(boot1) fica no setor 0. Como o boot1 
-                          ; já carregou 2 setores para o boot2(1024B), o kernel iniciará a partir no Setor 3.
-    mov ecx, 100          ; TOTAL de setores: total de setores(512 bytes * TOTAL) que serão lidos
-    mov edi, 0x0100000    ; Endereço físico na memória para onde serão copiados os setores(primeiro 1MB)
+    ;mov eax, 1                 ; Setor: número do setor de início (0 é o bootloader)
+    mov eax, KERNEL_SETOR_INI   ; Setor INICIAL: Esta constante possui o número do primeiro setor do disco/mídia a ser copiado
+                                ; para o endereço 0x0100000. O bootloader(boot1) fica no setor 0. Como o boot1 
+                                ; já carregou 2 setores para o boot2(1024B), o kernel iniciará a partir no Setor 3.
+    mov ecx, 100                ; TOTAL de setores: total de setores(512 bytes * TOTAL) que serão lidos
+    mov edi, 0x0100000          ; Endereço físico na memória para onde serão copiados os setores(primeiro 1MB)
     call ata_lba_read
 
     ; Salta para o endereço de memória onde o kernel foi carregado   

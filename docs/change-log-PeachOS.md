@@ -52,3 +52,5 @@ kernel.asm seja linkado antes dos demais, pois ele possui posições fixas que
 são calculadas manualmente. Se o código assembly dos demais objetos for inserido
 antes dele, as posições de memória são modificadas. Con segui Eliminei section
 ajustando a ordem de linkagem no Makefile;
+b) ajustes do bootloader e no kernel.asm para retirar as chamadas de criação
+das tabelas de paging;

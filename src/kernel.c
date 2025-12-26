@@ -18,6 +18,9 @@
 #include "./drivers/disk/streamer.h"
 #include "./fs/path.h"
 #include "./fs/file.h"
+#include "./gdt/gdt.h"
+#include "./config.h"
+#include "./task/tss.h"
 
 /*
 [ heap_region_start ] ----------------------+
@@ -68,7 +71,21 @@ void debug_kernel_main(void) {
     kprintf("\nTable index=%d", paging_table_index((void *)pag1));
 
 }
+
+tss_t tss_real;
+gdt_entry_t gdt_real[GDT_SEGMENTS_LEN];
+gdt_segmento_t gdt_segs[GDT_SEGMENTS_LEN]= {
+    {.base = 0x00, .limit = 0x00, .type = GDT_ENTRY_NULL},                      // NULL Segment
+    {.base = 0x00, .limit = 0xffffffff, .type = GDT_KERNEL_CODE},               // Kernel code segment
+    {.base = 0x00, .limit = 0xffffffff, .type = GDT_KERNEL_DATA},               // kernel data segment
+    {.base = 0x00, .limit = 0xffffffff, .type = GDT_USER_CODE},                 // User code segment
+    {.base = 0x00, .limit = 0xffffffff, .type = GDT_USER_DATA},                 // User data segmente
+    {.base = (uint32_t)&tss_real, .limit = sizeof(tss_real), .type = GDT_TSS}   //TSS
+};           
+
 char buf[512];
+
+extern uint32_t _kernel_stack_top;
 
 void kernel_main(void *e820_address) {
     // Agora você já está executando em 0xC0xxxxxx
@@ -83,9 +100,22 @@ void kernel_main(void *e820_address) {
 
     // Search and initialize the disks
     disk_search_and_init();
-    
+
+    //Setup de GDT
+    kmemset(gdt_real,0, sizeof(gdt_real));
+    gdt_add_entries(gdt_real, gdt_segs, GDT_SEGMENTS_LEN);    
+    gdt_load(gdt_real, sizeof(gdt_real));
+    //******************** */
+
     //Inicializa a IDT
     idt_init();
+
+    // Setup the TSS
+    kmemset(&tss_real, 0x00, sizeof(tss_real));
+    tss_real.esp0 = _kernel_stack_top;
+    tss_real.ss0 = KERNEL_DATA_SELECTOR;
+    tss_load(KERNEL_TSS_SELECTOR);
+    //--------------------------------
     
     //Inicializa o PIC
     setup_pic();
