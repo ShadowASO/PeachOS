@@ -31,13 +31,25 @@ static inline uintptr_t pmm_frame_to_addr(size_t frame_idx)
     return (uintptr_t)(frame_idx * (size_t)PMM_FRAME_SIZE);
 }
 
-size_t pmm_calc_bitmap_size_bytes(size_t phys_mem_size)
+static void pmm_mask_invalid_tail_bits(void)
 {
-    size_t frames = phys_mem_size / PMM_FRAME_SIZE;
-    if (frames > PMM_MAX_FRAMES)
-        frames = PMM_MAX_FRAMES;
+    size_t rem = g_pmm_total_frames & 31u;
+    if (rem == 0) return;
 
-    size_t words = (frames + 31u) / 32u;
+    uint32_t invalid_mask = 0xFFFFFFFFu << rem;
+    g_pmm_bitmap[g_pmm_bitmap_words - 1] |= invalid_mask; // força inválidos como usados
+}
+
+
+size_t pmm_calc_bitmap_size_bytes(uint64_t phys_mem_size)
+{
+    uint64_t phys_aligned = (phys_mem_size / PMM_FRAME_SIZE) * PMM_FRAME_SIZE;
+    uint64_t frames64 = phys_aligned / PMM_FRAME_SIZE;
+
+    if (frames64 > PMM_MAX_FRAMES) frames64 = PMM_MAX_FRAMES;
+
+    size_t frames = (size_t)frames64;
+    size_t words  = (frames + 31u) / 32u;
     return words * sizeof(uint32_t);
 }
 
@@ -76,29 +88,81 @@ size_t pmm_get_free_memory_bytes(void)
  * Marca regiões de acordo com E820 + kernel
  * ----------------------------------------------------------- */
 
+static inline size_t pmm_addr_to_frame64(uint64_t addr) {
+    return (size_t)(addr / PMM_FRAME_SIZE);
+}
+
+void pmm_mark_region_used64(uint64_t base_phys, uint64_t length)
+{
+    if (length == 0 || g_pmm_total_frames == 0) return;
+
+    uint64_t limit_bytes = (uint64_t)g_pmm_total_frames * PMM_FRAME_SIZE;
+
+    // clamp base dentro do limite
+    if (base_phys >= limit_bytes) return;
+
+    uint64_t end = base_phys + length;
+    if (end > limit_bytes) end = limit_bytes;
+
+    size_t first = pmm_addr_to_frame64(base_phys);
+    size_t last  = pmm_addr_to_frame64(end - 1);
+
+    for (size_t f = first; f <= last; ++f) {
+        PMM_SET_BIT(g_pmm_bitmap, f);
+    }
+}
+
+void pmm_mark_region_free64(uint64_t base_phys, uint64_t length)
+{
+    if (length == 0 || g_pmm_total_frames == 0) return;
+
+    uint64_t limit_bytes = (uint64_t)g_pmm_total_frames * PMM_FRAME_SIZE;
+
+    if (base_phys >= limit_bytes) return;
+
+    uint64_t end = base_phys + length;
+    if (end > limit_bytes) end = limit_bytes;
+
+    size_t first = pmm_addr_to_frame64(base_phys);
+    size_t last  = pmm_addr_to_frame64(end - 1);
+
+    for (size_t f = first; f <= last; ++f) {
+        PMM_CLEAR_BIT(g_pmm_bitmap, f);
+    }
+}
+
+
 void pmm_mark_regions_status(void)
 {
-    /* Marca regiões NÃO USÁVEIS do E820 como usadas. */
     size_t count = e820_regions_count();
-    for (size_t i = 0; i < count; i++) {
-        phys_region_t *region = e820_region_by_index(i);
 
-        if (region->type != E820_TYPE_USABLE) {
-            uintptr_t base_phys = (uintptr_t)region->base;
-            size_t   length    = (size_t)region->length; // cuidado: trunc em 32 bits
-            pmm_mark_region_used(base_phys, length);
+    // Como o bitmap começa 0xFFFFFFFF (tudo usado),
+    // aqui nós LIBERAMOS somente as regiões USABLE.
+    for (size_t i = 0; i < count; i++) {
+        phys_region_t *r = e820_region_by_index(i);
+
+        uint64_t base = (uint64_t)r->base;
+        uint64_t len  = (uint64_t)r->length;
+
+        if (r->type == E820_TYPE_USABLE) {
+            pmm_mark_region_free64(base, len);
         }
     }
 
-    /* Opcional: nunca use o frame 0 (para pegar ponteiros NULOS, BIOS, etc.) */
-    pmm_mark_region_used(0, PMM_FRAME_SIZE);
+    // Nunca use frame 0
+    pmm_mark_region_used64(0, PMM_FRAME_SIZE);
 
-    /* Marca a região ocupada pelo kernel como usada. */
-    pmm_mark_region_used(get_kernel_ini_phys(), get_kernel_size());
-    
-    /* Marcar a área do bitmap */
-    pmm_mark_region_used((uintptr_t)g_pmm_bitmap, g_pmm_bitmap_size);
+    // Kernel em físico
+    pmm_mark_region_used64((uint64_t)get_kernel_ini_phys(),
+                           (uint64_t)get_kernel_size());
+
+    // Bitmap: AQUI você precisa do endereço físico real do bitmap!
+    // Se g_pmm_bitmap for VA (high-half), isso está errado.
+    // Use g_pmm_bitmap_phys.
+    pmm_mark_region_used64((uint64_t)(uintptr_t)g_pmm_bitmap,
+                           (uint64_t)g_pmm_bitmap_size);
 }
+
 
 static void pmm_recalc_free_frames(void)
 {
@@ -128,137 +192,90 @@ static void pmm_recalc_free_frames(void)
  * Inicialização
  * ----------------------------------------------------------- */
 
-void pmm_init(uint32_t *bitmap_ini, uint32_t phys_mem_size)
+void pmm_init(uint32_t *bitmap_ini, uint64_t phys_mem_size)
 {
+    if (!bitmap_ini) return;
+
     g_pmm_bitmap = bitmap_ini;
 
-    /* total de frames que cabem na memória física detectada */
-    g_pmm_total_frames = phys_mem_size / PMM_FRAME_SIZE;
-    if (g_pmm_total_frames > PMM_MAX_FRAMES) {
-        g_pmm_total_frames = PMM_MAX_FRAMES;
-    }
+    uint64_t phys_aligned = (phys_mem_size / PMM_FRAME_SIZE) * PMM_FRAME_SIZE;
+    uint64_t frames64 = phys_aligned / PMM_FRAME_SIZE;
+    if (frames64 > PMM_MAX_FRAMES) frames64 = PMM_MAX_FRAMES;
 
-    /* quantos bits precisamos (1 por frame) -> converte para words de 32 bits */
+    g_pmm_total_frames = (size_t)frames64;
     g_pmm_bitmap_words = (g_pmm_total_frames + 31u) / 32u;
     g_pmm_bitmap_size  = g_pmm_bitmap_words * sizeof(uint32_t);
 
-    /* zera só a parte efetivamente usada do bitmap */
-    for (size_t i = 0; i < g_pmm_bitmap_words; ++i) {
-        g_pmm_bitmap[i] = 0u;
-    }
+    // Começa tudo usado
+    for (size_t i = 0; i < g_pmm_bitmap_words; ++i)
+        g_pmm_bitmap[i] = 0xFFFFFFFFu;
 
-    /* inicialmente consideramos todos os frames como livres */
-    g_pmm_free_frames = g_pmm_total_frames;
+    pmm_mask_invalid_tail_bits();
 
-    /* agora marcamos as regiões usadas (E820 + kernel),
-       e cada marcação vai decrementando g_pmm_free_frames */
+    // Libera regiões USABLE e depois trava kernel/bitmap/etc
     pmm_mark_regions_status();
-    //pmm_mark_control_structures(); // vou sugerir abaixo
+
+    // Recalcula (e NÃO mexa em g_pmm_free_frames dentro das mark_* enquanto usar recalc)
     pmm_recalc_free_frames();
 }
 
 
 
-/* -----------------------------------------------------------
- * Marca regiões usadas / livres
- * ----------------------------------------------------------- */
-
-void pmm_mark_region_used(uintptr_t base_phys, size_t length)
-{
-    if (length == 0) return;
-
-    uintptr_t end = base_phys + length;
-
-    size_t first_frame = pmm_addr_to_frame(base_phys);
-    size_t last_frame  = pmm_addr_to_frame(end - 1);  /* inclusivo */
-
-    if (last_frame >= g_pmm_total_frames) {
-        last_frame = g_pmm_total_frames - 1;
-    }
-
-    for (size_t f = first_frame; f <= last_frame; ++f) {
-        if (!PMM_TEST_BIT(g_pmm_bitmap, f)) {
-            PMM_SET_BIT(g_pmm_bitmap, f);
-            /* aqui decrementa SEM checar > 0,
-               pois sabemos que estamos só marcando 0->1 */
-            --g_pmm_free_frames;
-        }
-    }
-}
-
-
-void pmm_mark_region_free(uintptr_t base_phys, size_t length)
-{
-    if (length == 0) return;
-
-    uintptr_t end = base_phys + length;
-
-    size_t first_frame = pmm_addr_to_frame(base_phys);
-    size_t last_frame  = pmm_addr_to_frame(end - 1);  /* inclusivo */
-
-    if (first_frame >= g_pmm_total_frames) {
-        return;
-    }
-    if (last_frame >= g_pmm_total_frames) {
-        last_frame = g_pmm_total_frames - 1;
-    }
-
-    for (size_t f = first_frame; f <= last_frame; ++f) {
-        if (PMM_TEST_BIT(g_pmm_bitmap, f)) {
-            PMM_CLEAR_BIT(g_pmm_bitmap, f);
-            ++g_pmm_free_frames;
-        }
-    }
-}
-
-/* -----------------------------------------------------------
- * Alocação / liberação de frames
- * ----------------------------------------------------------- */
-
 uintptr_t pmm_alloc_frame(void)
 {
-    if (g_pmm_free_frames == 0) {
-        return 0;  /* sem memória livre */
+    if (g_pmm_free_frames == 0 || g_pmm_total_frames == 0) {
+        return 0;
     }
 
-    /* Percorre apenas os words realmente usados. */
     for (size_t word = 0; word < g_pmm_bitmap_words; ++word) {
         uint32_t value = g_pmm_bitmap[word];
 
-        /* Se value == 0xFFFFFFFF, todos os 32 frames deste word já estão usados. */
         if (value == 0xFFFFFFFFu) {
             continue;
         }
 
-        /* Ainda há pelo menos 1 bit zero aqui. Procura o primeiro bit 0. */
         for (uint32_t bit = 0; bit < 32u; ++bit) {
             uint32_t mask = 1u << bit;
             if (!(value & mask)) {
                 size_t frame_idx = word * 32u + bit;
 
+                // Segurança extra (idealmente não precisa se você mascarar bits inválidos na init)
                 if (frame_idx >= g_pmm_total_frames) {
-                    /* Passou do limite real de frames disponíveis. */
-                    return 0;
+                    break; // não "return 0" aqui
                 }
 
                 PMM_SET_BIT(g_pmm_bitmap, frame_idx);
-                --g_pmm_free_frames;
+                if (g_pmm_free_frames) --g_pmm_free_frames;
 
-                return pmm_frame_to_addr(frame_idx);
+                return (uintptr_t)frame_idx * (uintptr_t)PMM_FRAME_SIZE;
             }
         }
     }
 
-    /* Se chegou aqui, não encontrou frame livre dentro dos frames válidos. */
     return 0;
 }
 
+
 void pmm_free_frame(uintptr_t frame_addr)
 {
-    size_t frame_idx = pmm_addr_to_frame(frame_addr);
+    if (g_pmm_total_frames == 0) return;
 
+    // Exige alinhamento de página/frame
+    if (frame_addr & (PMM_FRAME_SIZE - 1)) {
+        return; // ou log/panic
+    }
+
+    // Nunca libere frame 0
+    if (frame_addr == 0) {
+        return;
+    }
+
+    // (Opcional mas MUITO recomendado)
+    // if (frame_addr >= kernel_start && frame_addr < kernel_end) return;
+    // if (frame_addr >= bitmap_start && frame_addr < bitmap_end) return;
+
+    size_t frame_idx = (size_t)(frame_addr / PMM_FRAME_SIZE);
     if (frame_idx >= g_pmm_total_frames) {
-        /* Endereço inválido — poderia logar erro aqui. */
         return;
     }
 
@@ -267,6 +284,7 @@ void pmm_free_frame(uintptr_t frame_addr)
         ++g_pmm_free_frames;
     }
 }
+
 
 size_t pmm_get_free_frame_count(void)
 {

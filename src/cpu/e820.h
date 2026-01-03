@@ -71,7 +71,7 @@ static inline e820_type_t e820_to_phys(uint32_t t) {
 
 void e820_memory_init(e820_address_t *e820_address);
 
-size_t e820_memory_size(void);
+uint64_t e820_memory_size(void);
 size_t e820_memory_free(void);
 size_t e820_regions_count();
 

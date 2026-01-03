@@ -45,7 +45,8 @@
 
 /* Tamanho máximo de memória física suportada pelo bitmap.
  * Ajuste conforme sua máquina/uso (ex.: 256 MiB, 512 MiB, 1 GiB...). */
-#define PMM_MAX_PHYS_MEM      (MB_SIZE * 256)  /* 1 MB */
+//#define PMM_MAX_PHYS_MEM      (MB_SIZE * 256)  /* 1 MB */
+#define PMM_MAX_PHYS_MEM      (MB_SIZE * 1024*4)  /* 1 MB */
 
 /* Número total de frames (cada um de 4 KiB) que cabem em PMM_MAX_PHYS_MEM. */
 #define PMM_MAX_FRAMES        (PMM_MAX_PHYS_MEM / PMM_FRAME_SIZE)
@@ -94,13 +95,15 @@
  *    - região reservada (BIOS, MMIO, etc.)
  */
 
-void pmm_init(uint32_t *bitmap_ini, uint32_t phys_mem_size);
+//void pmm_init(uint64_t *bitmap_ini, uint64_t phys_mem_size);
+void pmm_init(uint32_t *bitmap_ini, uint64_t phys_mem_size);
 
 /* Marca uma região de memória física como USADA.
  *  base_phys: endereço físico inicial
  *  length: tamanho em bytes
  */
-void pmm_mark_region_used(uintptr_t base_phys, size_t length);
+//void pmm_mark_region_used(uintptr_t base_phys, size_t length);
+void pmm_mark_region_used64(uint64_t base_phys, uint64_t length);
 
 /* Marca uma região de memória física como LIVRE.
  * Útil se você inicialmente marcou tudo como usado, por exemplo.
@@ -126,6 +129,7 @@ size_t pmm_get_free_frame_count(void);
 size_t pmm_get_free_memory_bytes(void);
 
 uintptr_t pmm_bitmap_end_addr(void);
-size_t pmm_calc_bitmap_size_bytes(size_t phys_mem_size);
+//size_t pmm_calc_bitmap_size_bytes(size_t phys_mem_size);
+size_t pmm_calc_bitmap_size_bytes(uint64_t phys_mem_size);
 
 #endif /* PMM_H */

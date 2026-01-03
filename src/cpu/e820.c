@@ -20,7 +20,7 @@ static phys_region_t phys_entries[MAX_E820_ENTRIES];
 
 //Cria a estrutura que irá guardar em memória o mapa da memória
 static phys_map_t physmap;
-static size_t physmem_size=0;
+static uint64_t physmem_size=0;
 static size_t physmem_free=0;
 
 
@@ -67,7 +67,7 @@ size_t e820_regions_count() {
     return physmap.count;
 }
 
-size_t e820_memory_size(void)
+uint64_t e820_memory_size(void)
 {    
     return physmem_size;
 }

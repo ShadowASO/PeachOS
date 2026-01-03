@@ -253,13 +253,13 @@ void kheap_init(uint32_t region_start,
     heap_free_units = heap_current_total_units();
 
     /* Marcar a área de memória física do heap_bitmap */
-    pmm_mark_region_used((uintptr_t)heap_bitmap, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
+    pmm_mark_region_used64((uintptr_t)heap_bitmap, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
 
     /* Marcar a área de memória física do heap_bitmap */
-    pmm_mark_region_used((uintptr_t)heap_alloc_units, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
+    pmm_mark_region_used64((uintptr_t)heap_alloc_units, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
 
     /* Marcar a área de memória física do heap */
-    pmm_mark_region_used((uintptr_t)heap_region_start, kheap_initial_size);
+    pmm_mark_region_used64((uintptr_t)heap_region_start, kheap_initial_size);
 }
 
 /* ----------------------------------------------------

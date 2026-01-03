@@ -36,6 +36,8 @@
 #endif
 
 #define ALIGN_UP(x, align)   (((x) + ((align) - 1)) & ~((align) - 1))
+#define ALIGN_DOWN(x, align) ((x) & ~((align) - 1))
+
 
 #define INT32_BYTE_SIZE 4
 
@@ -73,7 +75,7 @@ void *get_kernel_ini_vmm(void);
 void *get_kernel_end_vmm(void);
 uint32_t get_kernel_ini_phys(void);
 uint32_t get_kernel_end_phys(void);
-size_t get_memory_size(void);
+uint64_t get_memory_size(void);
 size_t get_kernel_size(void) ;
 
 #endif // boot_HEAP_H

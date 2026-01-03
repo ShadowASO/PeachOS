@@ -2,9 +2,10 @@
 #include "../cpu/e820.h"
 #include "../klib/kprintf.h"
 
-
+//Limites para alocar memória, antes do setup da 
+//heap
 static uint32_t boot_early_start = 0;
-static uint32_t boot_early_end   = 0;
+static uint32_t boot_early_max   = 0;
 static uint32_t boot_early_curr  = 0;
 static bool     boot_early_inited = false;
 
@@ -22,7 +23,7 @@ static uint32_t *kernel_end_vmm = NULL;
 static uint32_t kernel_ini_phys = 0;
 static uint32_t kernel_end_phys = 0;
 
-static size_t phys_mem_size=0;
+static uint64_t phys_mem_size=0;
 static size_t kernel_size=0;
 
 void make_memory_map(e820_address_t *e820_address) {
@@ -57,18 +58,22 @@ uint32_t get_kernel_ini_phys(){
 uint32_t get_kernel_end_phys(){
     return kernel_end_phys;
 }
-size_t get_memory_size() {
+uint64_t get_memory_size() {
     return phys_mem_size;
 }
 size_t get_kernel_size() {
     return kernel_size;
 }
-void boot_early_init(uint32_t start, uint32_t size) {
+/**
+ * Calcula e fixa os limites da memória para permitir a posterior alocação, 
+ * que inicial em aligned_start e termina em aligned_end
+ */
+void boot_early_init(uint32_t start, uint32_t max_size) {
     // Garante alinhamento do início
-    uint32_t aligned_start = ALIGN_UP(start, boot_HEAP_ALIGNMENT);
-    uint32_t aligned_end   = start + size;
+    uint32_t aligned_start = ALIGN_UP(start, boot_HEAP_ALIGNMENT);    
+    uint32_t aligned_max   = ALIGN_DOWN(max_size, boot_HEAP_ALIGNMENT);
 
-    if (aligned_end <= aligned_start) {
+    if (aligned_max <= aligned_start) {
         // Range inválido, em produção você pode chamar panic()
         // ou logar erro.
         boot_early_inited = false;
@@ -77,7 +82,7 @@ void boot_early_init(uint32_t start, uint32_t size) {
 
     boot_early_start  = aligned_start;
     boot_early_curr   = aligned_start;
-    boot_early_end    = aligned_end;
+    boot_early_max    = aligned_max;
     boot_early_inited = true;
 
     debug_early_init() ;
@@ -87,7 +92,7 @@ void boot_early_init(uint32_t start, uint32_t size) {
 void debug_early_init() {
     kprintf("\nboot_early_start=0x%x", boot_early_start);   
     kprintf("\nboot_early_curr=0x%x", boot_early_curr);   
-    kprintf("\nboot_early_end=0x%x", boot_early_end);   
+    kprintf("\nboot_early_max=0x%x", boot_early_max);   
    
 }
 
@@ -103,14 +108,14 @@ void* boot_early_kalloc(size_t size, size_t align) {
     uintptr_t aligned = (curr + (align - 1)) & ~(align - 1);
     
     // Verifica se cabe
-    if (aligned + size > boot_early_end) {
+    if (aligned + size > boot_early_max) {
         // Sem espaço na early heap
         
         kprintf("\nsize=0x%x", size); 
         kprintf("\nboot_early_curr=0x%x", boot_early_curr); 
         kprintf("\nboot_early_curr aligned=0x%x", aligned ); 
         kprintf("\nboot_early_curr aligned + size=0x%x", aligned + size); 
-        kprintf("\nboot_early_end=0x%x", boot_early_end); 
+        kprintf("\nboot_early_end=0x%x", boot_early_max); 
 
         return NULL;
     }
@@ -154,7 +159,7 @@ uint32_t boot_early_used(void) {
 
 uint32_t boot_early_total(void) {
     if (!boot_early_inited) return 0;
-    return boot_early_end - boot_early_start;
+    return boot_early_max - boot_early_start;
 }
 
 bool boot_early_is_initialized(void) {

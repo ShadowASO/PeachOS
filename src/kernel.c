@@ -138,16 +138,16 @@ void kernel_main(void *e820_address) {
     }
     int fd2 = fopen("0:/hello2.txt","r");
     if(fd2) {
-        kprintf("\nO arquivo hello2.txt aberto");
-        char buf2[64];
-        //fseek(fd2,2,SEEK_SET);
-        int i=fread(buf2,30,1,fd2);
-        buf2[i]=0x00;
-        kprintf("\nLidos: %d", i);
-        kprintf("\nConteudo: %s", buf2);
-        struct file_stat s2;
-        fstat(fd2,&s2);
-        kprintf("\nSize=%d",s2.filesize);
+        // kprintf("\nO arquivo hello2.txt aberto");
+        // char buf2[64];
+        // //fseek(fd2,2,SEEK_SET);
+        // int i=fread(buf2,30,1,fd2);
+        // buf2[i]=0x00;
+        // kprintf("\nLidos: %d", i);
+        // kprintf("\nConteudo: %s", buf2);
+        // struct file_stat s2;
+        // fstat(fd2,&s2);
+        // kprintf("\nSize=%d",s2.filesize);
         fclose(fd2);
         
     }
@@ -158,7 +158,13 @@ void kernel_main(void *e820_address) {
 
     
     kmemset(buf, 0xAA, 512);
-    
+
+    //int val=4099;
+    // kprintf("\nMemória: %d", val);
+    // //int val_up=ALIGN_UP(val, 4096);
+    // kprintf("\nMemória: %d", ALIGN_UP(val, 4096));
+    // kprintf("\nMemória: %d", ALIGN_DOWN(val, 4096));
+   
     
     _wait();
     

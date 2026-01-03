@@ -169,13 +169,12 @@ static page_directory_t* create_page_directory(void)
  * - identity map de toda a RAM (0 .. mem_size_mb)
  * - mapeia o kernel em high-half (kernel_virt_base)
  */
-void paging_init(uint32_t mem_size_mb,
+void paging_init(uint32_t mem_size_bytes,
                  uintptr_t kernel_phys_start,
                  uintptr_t kernel_phys_end,
                  uintptr_t kernel_virt_base)
 {
-    //kprintf("\nentrei1");
-
+    
     // Cria diretório do kernel
     kernel_directory = create_page_directory();
     current_directory = kernel_directory;
@@ -183,30 +182,27 @@ void paging_init(uint32_t mem_size_mb,
     uint32_t flags = PAGE_PRESENT | PAGE_RW;
 
     /* 1) Identity map da RAM física 0 .. mem_size_mb*1MiB */
-    uintptr_t mem_end = (uintptr_t) mem_size_mb * 1024 * 1024;
+    
+    uintptr_t mem_end = (uintptr_t) ALIGN_DOWN(mem_size_bytes, PAGE_SIZE);
+    
+    kprintf("\n**mem_end %u",mem_end );    
 
     for (uintptr_t phys = 0; phys < mem_end; phys += PAGE_SIZE) {
         paging_map(phys, phys, flags);
     }
-    //kprintf("\npasse1");
-
+   
     /* 2) Mapeia a região do kernel em high-half */
     for (uintptr_t phys = kernel_phys_start; phys < kernel_phys_end; phys += PAGE_SIZE) {
         uintptr_t offset = phys - kernel_phys_start;
         uintptr_t virt   = kernel_virt_base + offset;
         paging_map(virt, phys, flags);
     }
-
-    //kprintf("\npasse2 CR3=0x%x", kernel_directory->phys_addr);
-   // _wait();
-
+    //kprintf("\n**kernel_phys_end %u",kernel_phys_end );
+   
     /* Carrega CR3 com o endereço físico do array de PDEs */
     paging_load_directory(kernel_directory->phys_addr);
 
-    //kprintf("\npasse3");
-    //_wait();
-
-    /* Liga o bit PG no CR0 */
+     /* Liga o bit PG no CR0 */
     paging_enable();
 
     // A partir daqui, você pode executar no endereço virtual do kernel.
