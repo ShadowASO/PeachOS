@@ -67,8 +67,8 @@ void debug_kernel_main(void) {
     pag1=(uintptr_t)kpage_alloc();
     kprintf("\nkpage_alloc=%p", pag1);
 
-    kprintf("\nDirectory index=%d", paging_directory_index((void *)pag1));
-    kprintf("\nTable index=%d", paging_table_index((void *)pag1));
+    //kprintf("\nDirectory index=%d", paging_directory_index((void *)pag1));
+    //kprintf("\nTable index=%d", paging_table_index((void *)pag1));
 
 }
 
@@ -95,7 +95,7 @@ void kernel_main(void *e820_address) {
     memory_setup(e820_address);
 
     //Inicializa a API de acesso ao disco
-    //disk_search_and_init();
+    
     fs_init();
 
     // Search and initialize the disks
@@ -123,6 +123,7 @@ void kernel_main(void *e820_address) {
     kprintf("\nHello, World!");
 
     int fd = fopen("0:/hello.txt","r");
+    kprintf("\n\nfd - phys address=%p", virt_to_phys_paging((uintptr_t)&fd));
     if(fd) {
         kprintf("\nO arquivo hello.txt aberto");
         char buf[14];

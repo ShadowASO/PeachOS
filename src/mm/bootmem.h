@@ -78,4 +78,8 @@ uint32_t get_kernel_end_phys(void);
 uint64_t get_memory_size(void);
 size_t get_kernel_size(void) ;
 
+static uintptr_t early_alloc_wrapper(size_t bytes, size_t align) {
+    return (uintptr_t)boot_early_kalloc(bytes, align);
+}
+
 #endif // boot_HEAP_H

@@ -2,11 +2,14 @@
 
 #include "pmm.h"
 #include "bootmem.h"
+#include "../klib/kprintf.h"
 
 /* Bitmap global.
  * Cada bit representa um frame de PMM_FRAME_SIZE bytes.
  */
 uint32_t *g_pmm_bitmap = NULL;
+static uint64_t g_pmm_bitmap_phys = 0;
+
 
 /* Quantos frames existem e quantos ainda estão livres */
 static size_t g_pmm_total_frames   = 0;
@@ -41,16 +44,34 @@ static void pmm_mask_invalid_tail_bits(void)
 }
 
 
+
 size_t pmm_calc_bitmap_size_bytes(uint64_t phys_mem_size)
 {
-    uint64_t phys_aligned = (phys_mem_size / PMM_FRAME_SIZE) * PMM_FRAME_SIZE;
-    uint64_t frames64 = phys_aligned / PMM_FRAME_SIZE;
+    uint64_t frames64 = 0;
 
-    if (frames64 > PMM_MAX_FRAMES) frames64 = PMM_MAX_FRAMES;
+    if (phys_mem_size > 0) {
+        frames64 = (phys_mem_size + (uint64_t)PMM_FRAME_SIZE - 1) / (uint64_t)PMM_FRAME_SIZE;
+    }
+
+    if (frames64 > (uint64_t)PMM_MAX_FRAMES) {
+        frames64 = (uint64_t)PMM_MAX_FRAMES;
+    }
 
     size_t frames = (size_t)frames64;
     size_t words  = (frames + 31u) / 32u;
-    return words * sizeof(uint32_t);
+    size_t bytes  = words * sizeof(uint32_t);
+
+    // kprintf("phys_mem_size=%x frames64=%x words=%x bytes=%x\n",
+    //         (unsigned)phys_mem_size,
+    //         (unsigned)frames64,
+    //         (unsigned)words,
+    //         (unsigned)bytes);
+
+    // kprintf("PMM_FRAME_SIZE=%x PMM_MAX_FRAMES=%x\n",
+    //         (unsigned)PMM_FRAME_SIZE,
+    //         (unsigned)PMM_MAX_FRAMES);
+
+    return bytes;
 }
 
 
@@ -159,7 +180,7 @@ void pmm_mark_regions_status(void)
     // Bitmap: AQUI você precisa do endereço físico real do bitmap!
     // Se g_pmm_bitmap for VA (high-half), isso está errado.
     // Use g_pmm_bitmap_phys.
-    pmm_mark_region_used64((uint64_t)(uintptr_t)g_pmm_bitmap,
+    pmm_mark_region_used64(g_pmm_bitmap_phys,
                            (uint64_t)g_pmm_bitmap_size);
 }
 
@@ -197,10 +218,18 @@ void pmm_init(uint32_t *bitmap_ini, uint64_t phys_mem_size)
     if (!bitmap_ini) return;
 
     g_pmm_bitmap = bitmap_ini;
+    //Endereço físico
+    //g_pmm_bitmap_phys = (uint64_t)(uintptr_t)bitmap_ini;
+    g_pmm_bitmap_phys = (uint64_t)virt_to_phys_kernel((uintptr_t)bitmap_ini);
 
-    uint64_t phys_aligned = (phys_mem_size / PMM_FRAME_SIZE) * PMM_FRAME_SIZE;
-    uint64_t frames64 = phys_aligned / PMM_FRAME_SIZE;
-    if (frames64 > PMM_MAX_FRAMES) frames64 = PMM_MAX_FRAMES;
+    uint64_t frames64 = 0;
+    if (phys_mem_size > 0) {
+        frames64 = (phys_mem_size + (uint64_t)PMM_FRAME_SIZE - 1) / (uint64_t)PMM_FRAME_SIZE;
+    }
+    if (frames64 > (uint64_t)PMM_MAX_FRAMES) 
+        frames64 = (uint64_t)PMM_MAX_FRAMES;
+
+
 
     g_pmm_total_frames = (size_t)frames64;
     g_pmm_bitmap_words = (g_pmm_total_frames + 31u) / 32u;

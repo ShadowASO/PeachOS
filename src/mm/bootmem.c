@@ -45,6 +45,8 @@ void bootmem_init(e820_address_t *e820_address) {
 
     //Tamanho total da memória
     phys_mem_size=e820_memory_size();
+
+   
 }
 void *get_kernel_ini_vmm(){
     return kernel_ini_vmm;
@@ -68,21 +70,21 @@ size_t get_kernel_size() {
  * Calcula e fixa os limites da memória para permitir a posterior alocação, 
  * que inicial em aligned_start e termina em aligned_end
  */
-void boot_early_init(uint32_t start, uint32_t max_size) {
+void boot_early_init(uint32_t start, uint32_t size_bytes) {
     // Garante alinhamento do início
-    uint32_t aligned_start = ALIGN_UP(start, boot_HEAP_ALIGNMENT);    
-    uint32_t aligned_max   = ALIGN_DOWN(max_size, boot_HEAP_ALIGNMENT);
+    uint32_t aligned_start = ALIGN_UP(start, boot_HEAP_ALIGNMENT);  
 
-    if (aligned_max <= aligned_start) {
-        // Range inválido, em produção você pode chamar panic()
-        // ou logar erro.
+    uint32_t end = start + size_bytes;            // <- isso é o certo
+    end = ALIGN_DOWN(end, boot_HEAP_ALIGNMENT);   // alinhe o END
+
+    if (end <= aligned_start) {
         boot_early_inited = false;
         return;
     }
 
     boot_early_start  = aligned_start;
     boot_early_curr   = aligned_start;
-    boot_early_max    = aligned_max;
+    boot_early_max    = end;
     boot_early_inited = true;
 
     debug_early_init() ;
@@ -97,6 +99,12 @@ void debug_early_init() {
 }
 
 void* boot_early_kalloc(size_t size, size_t align) {
+
+    if ((align & (align - 1)) != 0) return NULL;
+
+    if (align == 0) align = boot_HEAP_ALIGNMENT;
+
+
     if (!boot_early_inited || size == 0 ) {
         return NULL;
     }

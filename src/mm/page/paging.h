@@ -1,21 +1,18 @@
-// paging.h
 #ifndef PAGING_H
 #define PAGING_H
 
 #include <stdint.h>
 #include <stddef.h>
 
-/* Tamanho de página x86 (4 KiB) */
-
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 4096u
 #endif
 
 #ifndef PAGE_TABLE_ENTRIES
-#define PAGE_TABLE_ENTRIES 1024
+#define PAGE_TABLE_ENTRIES 1024u
 #endif
 
-/* Flags de página / diretório */
+/* Flags */
 #define PAGE_PRESENT   0x001
 #define PAGE_RW        0x002
 #define PAGE_USER      0x004
@@ -26,57 +23,74 @@
 #define PAGE_4MB       0x080
 #define PAGE_GLOBAL    0x100
 
-/* Helpers para extrair índices */
-#define PAGE_DIR_INDEX(vaddr)   (((vaddr) >> 22) & 0x3FF)
-#define PAGE_TABLE_INDEX(vaddr) (((vaddr) >> 12) & 0x3FF)
+#define PAGE_DIR_INDEX(vaddr)   ((((uint32_t)(vaddr)) >> 22) & 0x3FFu)
+#define PAGE_TABLE_INDEX(vaddr) ((((uint32_t)(vaddr)) >> 12) & 0x3FFu)
 
-/* Tipo de uma entrada de página (PTE/PDE) */
 typedef uint32_t page_entry_t;
 
-/* Estrutura da Tabela de Páginas: 1024 entradas de 32 bits (4 KiB) */
 typedef struct page_table {
-    page_entry_t entries[1024];
+    page_entry_t entries[PAGE_TABLE_ENTRIES];
 } page_table_t;
 
-/* Diretório de páginas:
- * - 'tables' guarda ponteiros virtuais para cada tabela (para uso em C)
- * - 'tables_phys' guarda o PDE (endereço físico + flags) usado pela CPU
- * - 'phys_addr' é o endereço físico do array tables_phys[0] (valor que vai para CR3)
- */
+/* Page Directory deve caber em 4KiB (1 frame) */
 typedef struct page_directory {
-    page_table_t* tables[1024];
-    uint32_t      tables_phys[1024];
-    uint32_t      phys_addr;
+    uint32_t pde[PAGE_TABLE_ENTRIES]; /* PDEs (PT phys + flags) */
 } page_directory_t;
 
-/* Diretório atual (em uso pela CPU) */
+typedef struct paging_ctx {
+    // alocador para estruturas no bootstrap (normalmente boot_early_kalloc)
+    uintptr_t (*alloc_page_aligned)(size_t bytes, size_t align);
+
+    // converter VA->PA do kernel (se você estiver high-half)
+    // no bootstrap identity, pode ser NULL (assumimos VA==PA)
+    uintptr_t (*virt_to_phys)(uintptr_t vaddr);
+
+    // limite de identity-map durante init (ex.: 64MiB)
+    uintptr_t bootstrap_identity_limit;
+
+    // base virtual do kernel high-half (ex.: 0xC0000000)
+    uintptr_t kernel_virt_base;
+
+    // range físico do kernel
+    uintptr_t kernel_phys_start;
+    uintptr_t kernel_phys_end;
+
+    // flags padrão para kernel pages (ex.: PAGE_RW)
+    uint32_t kernel_page_flags;
+} paging_ctx_t;
+
+/* diretórios globais */
 extern page_directory_t* current_directory;
+extern page_directory_t* kernel_directory;
 
-void paging_init(uint32_t mem_size_mb,
-                 uintptr_t kernel_phys_start,
-                 uintptr_t kernel_phys_end,
-                 uintptr_t kernel_virt_base);
+uintptr_t virt_to_phys_paging(uintptr_t virt);
 
-void paging_switch_directory(page_directory_t* dir);
+/* init minimal + kmap pronto */
+void paging_init_minimal(const paging_ctx_t* ctx);
 
-void paging_map(uintptr_t virt, uintptr_t phys, uint32_t flags);
-void paging_unmap(uintptr_t virt);
+/* troca CR3 */
+void paging_switch_directory(page_directory_t* dir, const paging_ctx_t* ctx);
 
-/* Aloca um frame físico e o mapeia em 'virt' com 'flags'.
- * Retorna o endereço físico do frame alocado.
- */
-uintptr_t vmm_alloc_page(uintptr_t virt, uint32_t flags);
+/* map/unmap genérico (cria PT sob demanda, usando kmap quando paging já estiver ON) */
+int  paging_map(page_directory_t* dir, const paging_ctx_t* ctx,
+                uintptr_t virt, uintptr_t phys, uint32_t flags);
 
-/* Desaloca a página virtual: desmapeia e libera o frame físico. */
-void vmm_free_page(uintptr_t virt);
+int  paging_unmap(page_directory_t* dir, const paging_ctx_t* ctx,
+                  uintptr_t virt);
 
-static inline size_t paging_directory_index(void *virtual_address) {
-    return ((uint32_t)virtual_address /(PAGE_SIZE * PAGE_TABLE_ENTRIES));
-}
+uintptr_t paging_get_physical(page_directory_t* dir, const paging_ctx_t* ctx,
+                              uintptr_t virt);
 
-static inline size_t paging_table_index(void *virtual_address) {
-    uint32_t index=((uint32_t)virtual_address % (PAGE_SIZE * PAGE_TABLE_ENTRIES) / PAGE_SIZE);
-    return index;
-}
+/* criação de diretório (para userland também) */
+page_directory_t* paging_create_directory(const paging_ctx_t* ctx);
 
-#endif // PAGING_H
+/* cria diretório user copiando o “high-half” do kernel */
+page_directory_t* paging_create_user_directory_from_kernel(const paging_ctx_t* ctx,
+                                                           const page_directory_t* kdir);
+
+int user_map_pages(page_directory_t* udir, 
+                    const paging_ctx_t* ctx,
+                   uintptr_t uva_start, 
+                   size_t size, uint32_t flags);
+
+#endif

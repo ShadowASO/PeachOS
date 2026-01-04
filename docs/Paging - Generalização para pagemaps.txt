@@ -1,0 +1,33 @@
+Generalização para “pagemaps” de processos usuárias
+
+Com isso pronto, você pode criar um page map de processo assim:
+
+page_directory_t* proc_dir = paging_create_directory_user_from_kernel(&ctx, kernel_directory);
+
+// Aí você mapeia páginas de usuário (low-half) com PAGE_USER:
+paging_map_in_dir_with_ctx(proc_dir, &ctx, 0x00400000, phys_frame, PAGE_USER | PAGE_RW);
+// e troca CR3:
+paging_switch_directory(proc_dir);
+
+
+Nota: no código acima, o paging_map_in_dir_with_ctx() está static no paging.c.
+Se você quiser usar fora, você expõe uma API do tipo:
+int paging_map_ex(page_directory_t*, const paging_ctx_t*, virt, phys, flags);
+
+Eu deixei assim para não “explodir” sua API agora, mas é simples expor.
+
+Próximo passo inevitável (para ficar “de verdade”)
+
+Hoje, fora do bootstrap, você vai querer que novas page tables sejam alocadas via PMM, não via boot_early_kalloc. Para isso, você precisa de um destes:
+
+Manter identity-map para a região onde você aloca PTs (garantir que PT frames estejam abaixo de bootstrap_identity_limit), ou
+
+Implementar um kmap (mapear temporariamente um frame físico num VA fixo) para poder zerar/preencher a PT.
+
+Se você me disser qual caminho você prefere (identity window ou kmap), eu te entrego:
+
+paging_map_ex() criando PT via PMM
+
+paging_destroy_directory_user() liberando PTs e frames do processo
+
+e um layout “kernel/user” bem limpo (com split 3G/1G ou 2G/2G).

@@ -29,31 +29,40 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "bootmem.h"
 
 /* Medidas de Memória*/
 
-#define KB_SIZE     1024u
-#define MB_SIZE     (KB_SIZE * KB_SIZE)
-#define GB_SIZE     (KB_SIZE * KB_SIZE * KB_SIZE)
-#define TB_SIZE     (KB_SIZE * KB_SIZE * KB_SIZE * KB_SIZE)
+#define KB_SIZE 1024ULL
+#define MB_SIZE (KB_SIZE * KB_SIZE)
+#define GB_SIZE (KB_SIZE * KB_SIZE * KB_SIZE)
+#define TB_SIZE (KB_SIZE * KB_SIZE * KB_SIZE * KB_SIZE)
+
 
 //-----------------------------------------------------
 
 /* Tamanho de cada frame de memória física.
  * 4 KiB é o padrão clássico para x86. */
-#define PMM_FRAME_SIZE        4096u
+#define PMM_FRAME_SIZE        4096ull
 
 /* Tamanho máximo de memória física suportada pelo bitmap.
  * Ajuste conforme sua máquina/uso (ex.: 256 MiB, 512 MiB, 1 GiB...). */
-//#define PMM_MAX_PHYS_MEM      (MB_SIZE * 256)  /* 1 MB */
-#define PMM_MAX_PHYS_MEM      (MB_SIZE * 1024*4)  /* 1 MB */
+
+#define PMM_MAX_PHYS_MEM   (4ULL * 1024ULL * 1024ULL * 1024ULL) // 4 GiB
 
 /* Número total de frames (cada um de 4 KiB) que cabem em PMM_MAX_PHYS_MEM. */
 #define PMM_MAX_FRAMES        (PMM_MAX_PHYS_MEM / PMM_FRAME_SIZE)
 
+
 /* Cada uint32_t tem 32 bits, então:
  * total de entradas necessárias no bitmap. */
-#define PMM_BITMAP_SIZE_U32   (PMM_MAX_FRAMES / 32u)
+
+#define PMM_BITMAP_SIZE_U32 ((PMM_MAX_FRAMES + 31ULL) / 32ULL)
+
+
+#if PMM_MAX_PHYS_MEM == 0 || PMM_MAX_FRAMES == 0
+#error "Overflow nas macros do PMM (use ULL)."
+#endif
 
 /* --------------------------------------------------------------------
  * Macros de manipulação de bits no bitmap
@@ -95,14 +104,14 @@
  *    - região reservada (BIOS, MMIO, etc.)
  */
 
-//void pmm_init(uint64_t *bitmap_ini, uint64_t phys_mem_size);
+
 void pmm_init(uint32_t *bitmap_ini, uint64_t phys_mem_size);
 
 /* Marca uma região de memória física como USADA.
  *  base_phys: endereço físico inicial
  *  length: tamanho em bytes
  */
-//void pmm_mark_region_used(uintptr_t base_phys, size_t length);
+
 void pmm_mark_region_used64(uint64_t base_phys, uint64_t length);
 
 /* Marca uma região de memória física como LIVRE.
@@ -129,7 +138,24 @@ size_t pmm_get_free_frame_count(void);
 size_t pmm_get_free_memory_bytes(void);
 
 uintptr_t pmm_bitmap_end_addr(void);
-//size_t pmm_calc_bitmap_size_bytes(size_t phys_mem_size);
+
 size_t pmm_calc_bitmap_size_bytes(uint64_t phys_mem_size);
+
+static inline uintptr_t virt_to_phys_kernel(uintptr_t virt)
+{
+    uintptr_t _kernel_virt_base=(uintptr_t)get_kernel_ini_vmm();
+    uintptr_t _kernel_virt_end=(uintptr_t)get_kernel_end_vmm();
+    uintptr_t _kernel_phys_base=(uintptr_t)get_kernel_ini_phys();
+
+    if (virt < (uintptr_t)&_kernel_virt_base ||
+        virt >= (uintptr_t)&_kernel_virt_end) {
+        // não é endereço do kernel
+        return virt; // assume identity
+    }
+
+    return virt - (uintptr_t)&_kernel_virt_base
+                + (uintptr_t)&_kernel_phys_base;
+}
+
 
 #endif /* PMM_H */
