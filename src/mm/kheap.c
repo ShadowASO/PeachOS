@@ -2,16 +2,34 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include "./mm.h"
 #include "kheap.h"
 #include "pmm.h"      // pmm_alloc_frame / pmm_free_frame
 #include "bootmem.h"  // se tiver algo útil aqui
 #include "../klib/memory.h"
+#include "./page/paging.h"
+#include "./page/paging_kmap.h"
+#include "../klib/panic.h"
+#include "../klib/kprintf.h"
 
 /* Se você tiver VMM, descomente/ajuste conforme sua assinatura */
 /// extern void vmm_map_page(uintptr_t phys, uintptr_t virt, uint32_t flags);
 
 /* flags típicos: presente + escrita (ajuste para o seu VMM) */
-#define KHEAP_PAGE_FLAGS   0x3u
+//#define KHEAP_PAGE_FLAGS   0x3u
+// -----------------------------------------------------------------------------
+// Configuração
+// -----------------------------------------------------------------------------
+
+// #ifndef KHEAP_BASE
+// #define KHEAP_BASE 0xD0000000u
+// #endif
+
+// #ifndef KHEAP_PAGE_FLAGS
+// // flags típicos para páginas do kernel: RW + PRESENT é aplicado dentro de paging_map,
+// // mas mantemos RW aqui e o map adiciona PRESENT.
+// #define KHEAP_PAGE_FLAGS (PAGE_RW)
+// #endif
 
 /* ----------------------------------------------------
  * Estado global da heap
@@ -46,8 +64,21 @@ static size_t heap_free_units       = 0;
  * Helpers de bitmap
  * -------------------------------------------------- */
 
-#define HEAP_WORD_INDEX(unit_idx)   ((unit_idx) / 32u)
-#define HEAP_BIT_OFFSET(unit_idx)   ((unit_idx) % 32u)
+// #define HEAP_WORD_INDEX(unit_idx)   ((unit_idx) / 32u)
+// #define HEAP_BIT_OFFSET(unit_idx)   ((unit_idx) % 32u)
+
+// typedef int  (*kheap_map_page_fn)(uintptr_t virt, uintptr_t phys, uint32_t flags);
+// typedef void (*kheap_zero_frame_fn)(uintptr_t phys);
+
+// static kheap_map_page_fn   g_map_page   = NULL;
+// static kheap_zero_frame_fn g_zero_frame = NULL;
+
+// void kheap_set_paging_hooks(kheap_map_page_fn map_fn, kheap_zero_frame_fn zero_fn)
+// {
+//     g_map_page   = map_fn;
+//     g_zero_frame = zero_fn;
+// }
+
 
 static inline bool heap_unit_is_used(uint32_t unit_idx)
 {
@@ -74,165 +105,172 @@ static inline uint32_t heap_current_total_units(void)
     return units;
 }
 
+static inline bool heap_is_initialized(void)
+{
+    return (heap_start_addr != 0 && heap_max_addr != 0 && heap_bitmap && heap_alloc_units);
+}
+
+// -----------------------------------------------------------------------------
+// Mapeamento/zero de frames
+// -----------------------------------------------------------------------------
+
+static inline void zero_frame_phys(uintptr_t phys)
+{
+    void* p = (void*)kmap(phys);
+    kmemset(p, 0, PAGE_SIZE);
+    kunmap();
+}
+
+static inline void map_page_kernel(uintptr_t virt, uintptr_t phys)
+{
+    paging_ctx_t *ctx=get_paging_ctx();
+    // paging_map já deve fazer invlpg. flags de kernel RW.
+    //if (paging_map(kernel_directory, &g_paging_ctx, virt, phys, KHEAP_PAGE_FLAGS) != 0) {
+    if (paging_map(kernel_directory, ctx, virt, phys, KHEAP_PAGE_FLAGS) != 0) {
+        panic("kheap: paging_map failed");
+    }
+}
+
 /* ----------------------------------------------------
  * Expansão da heap (integração com PMM + VMM)
  * -------------------------------------------------- */
 
-/* Garante que haja ao menos 'bytes_needed' adicionais além do tamanho atual.
- * Usa PMM para obter páginas físicas e (opcionalmente) VMM para mapear.
- *
- * Retorna true em caso de sucesso, false se não houver páginas físicas
- * ou se passar do limite kheap_max_size.
- */
-static bool heap_expand(uint32_t bytes_needed)
-{
-    if (bytes_needed == 0) {
-        return true;
-    }
+// -----------------------------------------------------------------------------
+// Expansão da heap (PMM + paging_map)
+// -----------------------------------------------------------------------------
 
-    uintptr_t cur_size      = heap_end_addr - heap_start_addr;
-    uintptr_t required_size = cur_size + bytes_needed;
+static bool heap_expand(size_t bytes_needed)
+{
+    if (bytes_needed == 0) return true;
+    if (!heap_is_initialized()) return false;
+
+    size_t cur_size      = (size_t)(heap_end_addr - heap_start_addr);
+    size_t required_size = cur_size + bytes_needed;
 
     if (required_size > kheap_max_size) {
-        /* não podemos crescer além do máximo configurado */
         return false;
     }
 
-    /* arredonda para múltiplos de página */
-    uintptr_t new_size_rounded = ALIGN_UP(required_size, KHEAP_PAGE_SIZE);
-    uintptr_t delta            = new_size_rounded - cur_size;
+    size_t new_size_rounded = (size_t)ALIGN_UP(required_size, PAGE_SIZE);
+    size_t delta            = new_size_rounded - cur_size;
+    if (delta == 0) return true;
 
-    if (delta == 0) {
-        return true;
-    }
-
-    uintptr_t vaddr     = heap_start_addr + cur_size;
-    uintptr_t end_vaddr = vaddr + delta;
+    uintptr_t vaddr     = heap_start_addr + (uintptr_t)cur_size;
+    uintptr_t end_vaddr = vaddr + (uintptr_t)delta;
 
     while (vaddr < end_vaddr) {
-        //uintptr_t phys = pmm_alloc_frame();
-         uintptr_t phys = (uintptr_t)boot_early_kalloc(PAGE_SIZE, PAGE_SIZE);
-        if (phys == 0) {
-            /* falha ao obter página física: idealmente reverter o que já foi
-             * mapeado nesta expansão, mas por simplicidade retornamos false. */
+        uintptr_t phys = pmm_alloc_frame();
+        if (!phys) {
+            // Ideal: rollback. Por ora, falha simples.
             return false;
         }
 
-        // vmm_map_page(phys, vaddr, KHEAP_PAGE_FLAGS);
-        vaddr += KHEAP_PAGE_SIZE;
+        zero_frame_phys(phys);
+        map_page_kernel(vaddr, phys);
+
+        vaddr += PAGE_SIZE;
     }
 
-    /* atualiza fim da heap */
-    heap_end_addr = heap_start_addr + new_size_rounded;
+    heap_end_addr = heap_start_addr + (uintptr_t)new_size_rounded;
 
-    /* ajusta contador de unidades livres: novas unidades entraram em jogo */
     uint32_t old_units = (uint32_t)(cur_size / HEAP_UNIT);
     uint32_t new_units = (uint32_t)(new_size_rounded / HEAP_UNIT);
-    heap_free_units   += (new_units - old_units);
+    heap_free_units   += (size_t)(new_units - old_units);
 
     return true;
 }
 
-/* ----------------------------------------------------
- * Inicialização
- * -------------------------------------------------- */
+
+// -----------------------------------------------------------------------------
+// Inicialização
+// -----------------------------------------------------------------------------
 
 /*
  * region_start      : início virtual da região reservada (metadados + dados)
- * region_size       : tamanho TOTAL reservado para heap
- * initial_heap_size : quanto da ÁREA DE DADOS começa ativo (o resto é expansão)
+ * region_size       : tamanho TOTAL reservado para heap (VA)
+ * initial_heap_size : quanto da ÁREA DE DADOS começa ativo (mapeado)
  *
  * IMPORTANTE:
- * - A região [region_start, region_start + region_size) já deve estar
- *   mapeada pelo código inicial de paginação (ou ser mapeável via VMM).
+ * - Antes de chamar kheap_init, você deve mapear páginas suficientes para cobrir:
+ *   [region_start, region_start + meta_slack + initial_heap_size)
+ *   onde meta_slack pode ser, por ex., 64KiB.
+ *
+ * Sugestão prática no memory_setup:
+ *   - reserve VA fixo: KHEAP_BASE
+ *   - mapear (pelo menos) (initial_heap_size + 64KiB) em páginas
+ *   - chamar kheap_init(KHEAP_BASE, region_size, initial_heap_size)
  */
 void kheap_init(uint32_t region_start,
                 uint32_t region_size,
                 uint32_t initial_heap_size)
 {
-    /* alinha início da região à granularidade de unidade */
-    uintptr_t rs        = (uintptr_t)region_start;
-    uintptr_t re        = rs + (uintptr_t)region_size;
-    uintptr_t rs_aligned = ALIGN_UP(rs, HEAP_UNIT);
+    uintptr_t rs  = (uintptr_t)region_start;
+    uintptr_t re  = rs + (uintptr_t)region_size;
 
+    // alinhar início da região para HEAP_UNIT
+    uintptr_t rs_aligned = ALIGN_UP(rs, HEAP_UNIT);
     if (rs_aligned >= re) {
-        /* região não sobra nada depois do alinhamento */
-        return;
+        panic("kheap_init: region too small after align");
     }
 
     heap_region_start = rs_aligned;
     heap_region_size  = (size_t)(re - rs_aligned);
 
-    uintptr_t region_end   = heap_region_start + heap_region_size;
+    uintptr_t region_end   = heap_region_start + (uintptr_t)heap_region_size;
     size_t    region_bytes = (size_t)(region_end - heap_region_start);
 
-    /* chute inicial: máximo de unidades de dados se não houvesse metadados */
+    // chute inicial: máximo de unidades se tudo fosse dado
     size_t max_units_guess = region_bytes / HEAP_UNIT;
     if (max_units_guess == 0) {
-        /* região muito pequena para qualquer heap */
-        return;
+        panic("kheap_init: region too small");
     }
 
-    size_t meta_bytes;
-    size_t bitmap_bytes;
-    size_t alloc_bytes;
-    size_t data_bytes;
+    size_t meta_bytes   = 0;
+    size_t bitmap_bytes = 0;
+    size_t alloc_bytes  = 0;
+    size_t data_bytes   = 0;
 
-    /* Loop para ajustar kheap_max_units até caber
-     * METADADOS + DADOS dentro de region_size. */
+    // Ajusta kheap_max_units até caber (metadados + dados)
     for (;;) {
         kheap_max_units = max_units_guess;
 
-        /* bitmap: 1 bit por unidade de dados -> ceil(units / 32) u32 */
         bitmap_bytes = sizeof(uint32_t) * ((kheap_max_units + 31u) / 32u);
-        /* tabela de tamanhos: 1 uint32_t por unidade de dados */
         alloc_bytes  = sizeof(uint32_t) * kheap_max_units;
 
         meta_bytes   = bitmap_bytes + alloc_bytes;
         meta_bytes   = (size_t)ALIGN_UP(meta_bytes, HEAP_UNIT);
 
         if (meta_bytes >= region_bytes) {
-            /* metadados nem cabem na região → reduzimos o chute */
-            if (max_units_guess == 0) {
-                return;
-            }
             max_units_guess /= 2;
+            if (max_units_guess == 0) {
+                panic("kheap_init: metadata doesn't fit");
+            }
             continue;
         }
 
         data_bytes = region_bytes - meta_bytes;
 
-        /* garante que a área de dados comporta kheap_max_units unidades */
-        if (data_bytes / HEAP_UNIT < kheap_max_units) {
-            if (max_units_guess == 0) {
-                return;
-            }
+        if ((data_bytes / HEAP_UNIT) < kheap_max_units) {
             max_units_guess /= 2;
+            if (max_units_guess == 0) {
+                panic("kheap_init: data area doesn't fit");
+            }
             continue;
         }
 
-        break; /* encontramos um kheap_max_units válido */
+        break;
     }
 
-    /* tamanho máximo de dados efetivamente utilizáveis */
     kheap_max_size = (data_bytes / HEAP_UNIT) * HEAP_UNIT;
 
-    /* tamanho inicial ativo (pode ser menor que o máximo) */
-    size_t init_bytes = ALIGN_UP(initial_heap_size, KHEAP_PAGE_SIZE);
+    size_t init_bytes = (size_t)ALIGN_UP((size_t)initial_heap_size, PAGE_SIZE);
     if (init_bytes == 0 || init_bytes > kheap_max_size) {
         init_bytes = kheap_max_size;
     }
     kheap_initial_size = init_bytes;
 
-    /* Layout na memória:
-     *
-     * [ heap_region_start ]
-     *   -> heap_bitmap (bitmap_bytes)
-     *   -> heap_alloc_units (alloc_bytes)
-     *   -> padding até HEAP_UNIT (meta_bytes total)
-     *   -> heap_start_addr (área de dados) ... heap_max_addr
-     */
-    uint8_t *meta_base = (uint8_t*)heap_region_start;
+    // Layout
+    uint8_t* meta_base = (uint8_t*)heap_region_start;
 
     heap_bitmap = (uint32_t*)meta_base;
     kheap_bitmap_size_u32 = (kheap_max_units + 31u) / 32u;
@@ -245,76 +283,51 @@ void kheap_init(uint32_t region_start,
         heap_alloc_units[i] = 0u;
     }
 
-    heap_start_addr = heap_region_start + meta_bytes;
-    heap_end_addr   = heap_start_addr + kheap_initial_size;
-    heap_max_addr   = heap_start_addr + kheap_max_size;
+    heap_start_addr = heap_region_start + (uintptr_t)meta_bytes;
+    heap_end_addr   = heap_start_addr + (uintptr_t)kheap_initial_size;
+    heap_max_addr   = heap_start_addr + (uintptr_t)kheap_max_size;
 
-    /* todas as unidades na faixa [heap_start_addr, heap_end_addr) começam livres */
-    heap_free_units = heap_current_total_units();
+    heap_free_units = (size_t)heap_current_total_units();
 
-    /* Marcar a área de memória física do heap_bitmap */
-    pmm_mark_region_used64((uintptr_t)heap_bitmap, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
-
-    /* Marcar a área de memória física do heap_bitmap */
-    pmm_mark_region_used64((uintptr_t)heap_alloc_units, kheap_bitmap_size_u32 * INT32_BYTE_SIZE);
-
-    /* Marcar a área de memória física do heap */
-    pmm_mark_region_used64((uintptr_t)heap_region_start, kheap_initial_size);
+#ifdef KHEAP_DEBUG
+    kprintf("[kheap] region_start=%p size=%u\n", (void*)heap_region_start, (unsigned)heap_region_size);
+    kprintf("[kheap] data_start=%p end=%p max=%p\n", (void*)heap_start_addr, (void*)heap_end_addr, (void*)heap_max_addr);
+    kprintf("[kheap] units max=%u bitmap_u32=%u free_units=%u\n",
+            (unsigned)kheap_max_units,
+            (unsigned)kheap_bitmap_size_u32,
+            (unsigned)heap_free_units);
+#endif
 }
-
-/* ----------------------------------------------------
- * Alocação interna por unidades com alinhamento
- * -------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Alocação interna por unidades com alinhamento
+// -----------------------------------------------------------------------------
 
 static void* heap_alloc_units_aligned(uint32_t units_needed,
                                       uint32_t align_bytes,
                                       bool can_expand)
 {
-    if (units_needed == 0) {
-        return NULL;
-    }
+    if (!heap_is_initialized() || units_needed == 0) return NULL;
 
-    /* 0 ou 1 → sem requisito especial */
-    if (align_bytes < HEAP_UNIT) {
-        align_bytes = HEAP_UNIT;
-    }
+    if (align_bytes < HEAP_UNIT) align_bytes = HEAP_UNIT;
 
     for (;;) {
         uint32_t total_units = heap_current_total_units();
 
-        if (units_needed > total_units) {
-            if (can_expand) {
-                uint32_t bytes_needed = units_needed * HEAP_UNIT;
-                if (!heap_expand(bytes_needed)) {
-                    return NULL;
-                }
-                continue;
-            } else {
-                return NULL;
-            }
-        }
+        if (units_needed > total_units || heap_free_units < units_needed) {
+            if (!can_expand) return NULL;
 
-        if (heap_free_units < units_needed) {
-            if (can_expand) {
-                uint32_t bytes_needed = units_needed * HEAP_UNIT;
-                if (!heap_expand(bytes_needed)) {
-                    return NULL;
-                }
-                continue;
-            } else {
-                return NULL;
-            }
+            size_t bytes_needed = (size_t)units_needed * (size_t)HEAP_UNIT;
+            if (!heap_expand(bytes_needed)) return NULL;
+            continue;
         }
 
         for (uint32_t start_unit = 0;
              start_unit + units_needed <= total_units;
              ++start_unit)
         {
-            uintptr_t addr =
-                heap_start_addr + (uintptr_t)start_unit * HEAP_UNIT;
+            uintptr_t addr = heap_start_addr + (uintptr_t)start_unit * HEAP_UNIT;
 
-            /* verifica alinhamento real em bytes */
-            if (align_bytes && (addr % align_bytes) != 0u) {
+            if ((addr % align_bytes) != 0u) {
                 continue;
             }
 
@@ -322,109 +335,91 @@ static void* heap_alloc_units_aligned(uint32_t units_needed,
             for (uint32_t u = 0; u < units_needed; ++u) {
                 if (heap_unit_is_used(start_unit + u)) {
                     all_free = false;
-                    start_unit += u;  /* pular para depois do ocupado */
+                    start_unit += u; // pular
                     break;
                 }
             }
+            if (!all_free) continue;
 
-            if (!all_free) {
-                continue;
-            }
-
-            /* marca como usado */
             for (uint32_t u = 0; u < units_needed; ++u) {
                 heap_set_unit_used(start_unit + u);
             }
+
             heap_alloc_units[start_unit] = units_needed;
             heap_free_units             -= units_needed;
 
             return (void*)addr;
         }
 
-        if (can_expand) {
-            uint32_t bytes_needed = units_needed * HEAP_UNIT;
-            if (!heap_expand(bytes_needed)) {
-                return NULL;
-            }
-            continue;
-        }
+        if (!can_expand) return NULL;
 
-        return NULL;
+        size_t bytes_needed = (size_t)units_needed * (size_t)HEAP_UNIT;
+        if (!heap_expand(bytes_needed)) return NULL;
     }
 }
-static inline bool heap_is_initialized(void) {
-    return (heap_start_addr != 0 && heap_max_addr != 0);
-}
 
-/* ----------------------------------------------------
- * API pública: kmalloc, kmalloc_aligned, kcalloc, krealloc, kfree
- * -------------------------------------------------- */
+
+// -----------------------------------------------------------------------------
+// API pública
+// -----------------------------------------------------------------------------
 
 void* kmalloc(size_t size)
 {
     if (!heap_is_initialized() || size == 0) return NULL;
 
-    if (size == 0) {
-        return NULL;
-    }
-
-    /* arredonda para múltiplos de HEAP_UNIT */
     uint32_t units_needed = (uint32_t)((size + (HEAP_UNIT - 1u)) / HEAP_UNIT);
-
-    /* alinhamento mínimo "normal": HEAP_ALIGNMENT (ex.: 8) */
     return heap_alloc_units_aligned(units_needed, HEAP_ALIGNMENT, true);
 }
 
-void* kzalloc(size_t size) {
-    void *ptr=kmalloc(size);
-    kmemset(ptr,0, size);
+void* kzalloc(size_t size)
+{
+    void* ptr = kmalloc(size);
+    if (!ptr) return NULL;
+    kmemset(ptr, 0, size);
     return ptr;
-
 }
 
 void* kmalloc_aligned(size_t size, size_t align)
 {
-    if (size == 0) {
-        return NULL;
-    }
+    if (!heap_is_initialized() || size == 0) return NULL;
 
     uint32_t units_needed = (uint32_t)((size + (HEAP_UNIT - 1u)) / HEAP_UNIT);
-
     return heap_alloc_units_aligned(units_needed, (uint32_t)align, true);
 }
 
 void* kcalloc(size_t n, size_t size)
 {
-    if (n == 0 || size == 0) {
-        return NULL;
-    }
+    if (!heap_is_initialized() || n == 0 || size == 0) return NULL;
 
-    /* proteção simples contra overflow de n * size */
     size_t total = n * size;
-    if (total / n != size) {
-        return NULL;
-    }
+    if (total / n != size) return NULL; // overflow
 
     void* ptr = kmalloc(total);
-    if (!ptr) {
-        return NULL;
-    }
-    kmemset(ptr, 0, total);
-      
+    if (!ptr) return NULL;
 
+    kmemset(ptr, 0, total);
     return ptr;
 }
 
 void kfree(void* ptr)
 {
-    if (!ptr) {
-        return;
-    }
+    if (!heap_is_initialized() || !ptr) return;
 
     uintptr_t addr = (uintptr_t)ptr;
 
+    // aceitamos liberar apenas dentro da área ativa
     if (addr < heap_start_addr || addr >= heap_end_addr) {
-        /* ponteiro fora da área de dados da heap */
+#ifdef KHEAP_DEBUG
+        kprintf("[kfree] ptr fora da heap: %p\n", ptr);
+#endif
+        return;
+    }
+
+    // exige alinhamento de unidade (evita ptr no meio)
+    if (((addr - heap_start_addr) % HEAP_UNIT) != 0u) {
+#ifdef KHEAP_DEBUG
+        kprintf("[kfree] ptr desalinhado: %p\n", ptr);
+#endif
         return;
     }
 
@@ -432,10 +427,9 @@ void kfree(void* ptr)
     uint32_t units      = heap_alloc_units[start_unit];
 
     if (units == 0) {
-        #ifdef KHEAP_DEBUG
-             kprintf("[kfree] ponteiro %p não é início de bloco; possivel double free ou corrupção\n", ptr);
-        #endif
-        /* não é início de bloco (talvez double free ou ptr inválido) */
+#ifdef KHEAP_DEBUG
+        kprintf("[kfree] ptr %p nao eh inicio de bloco (double free/corrupcao)\n", ptr);
+#endif
         return;
     }
 
@@ -449,38 +443,29 @@ void kfree(void* ptr)
 
 void* krealloc(void* ptr, size_t new_size)
 {
-    if (!ptr) {
-        return kmalloc(new_size);
-    }
+    if (!heap_is_initialized()) return NULL;
 
+    if (!ptr) return kmalloc(new_size);
     if (new_size == 0) {
         kfree(ptr);
         return NULL;
     }
 
     uintptr_t addr = (uintptr_t)ptr;
+    if (addr < heap_start_addr || addr >= heap_end_addr) return NULL;
 
-    if (addr < heap_start_addr || addr >= heap_end_addr) {
-        /* ponteiro fora da heap ⇒ trata como erro */
-        return NULL;
-    }
+    if (((addr - heap_start_addr) % HEAP_UNIT) != 0u) return NULL;
 
     uint32_t start_unit = (uint32_t)((addr - heap_start_addr) / HEAP_UNIT);
     uint32_t old_units  = heap_alloc_units[start_unit];
+    if (old_units == 0) return NULL;
 
-    if (old_units == 0) {
-        /* não é início de bloco conhecido ⇒ erro */
-        return NULL;
-    }
+    size_t old_size_bytes = (size_t)old_units * (size_t)HEAP_UNIT;
+    uint32_t new_units    = (uint32_t)((new_size + (HEAP_UNIT - 1u)) / HEAP_UNIT);
 
-    uint32_t old_size_bytes = old_units * HEAP_UNIT;
-    uint32_t new_units      = (uint32_t)((new_size + (HEAP_UNIT - 1u)) / HEAP_UNIT);
-
-    /* caso 1: novo tamanho cabe dentro do bloco atual */
+    // 1) cabe no bloco atual
     if (new_units <= old_units) {
-        if (new_units == old_units) {
-            return ptr;
-        }
+        if (new_units == old_units) return ptr;
 
         uint32_t units_to_free = old_units - new_units;
         uint32_t start_free    = start_unit + new_units;
@@ -488,54 +473,43 @@ void* krealloc(void* ptr, size_t new_size)
         for (uint32_t u = 0; u < units_to_free; ++u) {
             heap_set_unit_free(start_free + u);
         }
+
         heap_alloc_units[start_unit] = new_units;
         heap_free_units             += units_to_free;
-
         return ptr;
     }
 
-    /* caso 2: tentar expandir "para frente" se as unidades seguintes estiverem livres */
+    // 2) tentar crescer in-place
     uint32_t extra_units = new_units - old_units;
     uint32_t total_units = heap_current_total_units();
 
     if (start_unit + new_units <= total_units) {
-        bool can_grow_in_place = true;
-        uint32_t first_extra   = start_unit + old_units;
+        bool can_grow = true;
+        uint32_t first_extra = start_unit + old_units;
 
         for (uint32_t u = 0; u < extra_units; ++u) {
             if (heap_unit_is_used(first_extra + u)) {
-                can_grow_in_place = false;
+                can_grow = false;
                 break;
             }
         }
 
-        if (can_grow_in_place) {
+        if (can_grow) {
             for (uint32_t u = 0; u < extra_units; ++u) {
                 heap_set_unit_used(first_extra + u);
             }
             heap_alloc_units[start_unit] = new_units;
             heap_free_units             -= extra_units;
-
             return ptr;
         }
     }
 
-    /* caso 3: não dá para crescer in-place ⇒ aloca novo bloco, copia, libera o antigo */
+    // 3) alocar novo e copiar
     void* new_ptr = kmalloc(new_size);
-    if (!new_ptr) {
-        return NULL;
-    }
+    if (!new_ptr) return NULL;
 
-    uint32_t copy_bytes = (new_size < old_size_bytes)
-                            ? (uint32_t)new_size
-                            : old_size_bytes;
-
-    uint8_t* dst = (uint8_t*)new_ptr;
-    uint8_t* src = (uint8_t*)ptr;
-
-    for (uint32_t i = 0; i < copy_bytes; ++i) {
-        dst[i] = src[i];
-    }
+    size_t copy_bytes = (new_size < old_size_bytes) ? new_size : old_size_bytes;
+    kmemcpy(new_ptr, ptr, copy_bytes);
 
     kfree(ptr);
     return new_ptr;
@@ -543,21 +517,18 @@ void* krealloc(void* ptr, size_t new_size)
 
 void* kpage_alloc(void)
 {
-    /* página virtual 4KiB, alinhada em 4KiB */
-    return kmalloc_aligned(KHEAP_PAGE_SIZE, KHEAP_PAGE_SIZE);
+    return kmalloc_aligned(PAGE_SIZE, PAGE_SIZE);
 }
 
-/* se quiser um bloco de N páginas alinhado em página */
 void* kpages_alloc(size_t num_pages)
 {
-    size_t bytes = num_pages * KHEAP_PAGE_SIZE;
-    return kmalloc_aligned(bytes, KHEAP_PAGE_SIZE);
+    if (num_pages == 0) return NULL;
+    return kmalloc_aligned(num_pages * (size_t)PAGE_SIZE, PAGE_SIZE);
 }
 
-
-/* ----------------------------------------------------
- * Estatísticas simples
- * -------------------------------------------------- */
+// -----------------------------------------------------------------------------
+// Estatísticas
+// -----------------------------------------------------------------------------
 
 size_t kheap_get_free_units(void)
 {
@@ -568,11 +539,42 @@ size_t kheap_get_total_units(void)
 {
     return (size_t)heap_current_total_units();
 }
+/**
+ * Faz o mapeamento inicial da área de memória definida para a heap.
+ */
+void map_heap_initial(const paging_ctx_t* ctx, size_t bytes)
+{
+    uintptr_t va = KHEAP_BASE;
+    uintptr_t end = KHEAP_BASE + ALIGN_UP(bytes, PAGE_SIZE);
+
+    for (; va < end; va += PAGE_SIZE) {
+        uintptr_t pa = pmm_alloc_frame();
+        if (!pa) panic("OOM: heap init frames");
+
+        // zera frame via kmap (recomendado)
+        void* p = (void*)kmap(pa);
+        kmemset(p, 0, PAGE_SIZE);
+        kunmap();
+        //invalid_tlb((uintptr_t)p);
+        //kprintf("\nva=%p -> phys=%x",va,pa);
+
+
+        if (paging_map(kernel_directory, ctx, va, pa, PAGE_RW) != 0) {
+            panic("paging_map failed in heap init");
+        }
+    }
+}
+
 
 #ifdef KHEAP_DEBUG
 
 void kheap_debug_dump_bitmap(void)
 {
+    if (!heap_is_initialized()) {
+        kprintf("kheap not initialized\n");
+        return;
+    }
+
     uint32_t total_units = heap_current_total_units();
     uint32_t total_words = (total_units + 31u) / 32u;
 
@@ -586,15 +588,11 @@ void kheap_debug_dump_bitmap(void)
 
     for (uint32_t w = 0; w < total_words; ++w) {
         uint32_t word = heap_bitmap[w];
-
         kprintf("  [%4u] 0x%08x | ", w, word);
 
-        /* Imprime os bits daquele word, apenas até o total_units */
         for (uint32_t bit = 0; bit < 32u; ++bit) {
             uint32_t unit = w * 32u + bit;
-            if (unit >= total_units) {
-                break;
-            }
+            if (unit >= total_units) break;
             kprintf("%c", (word & (1u << bit)) ? '1' : '0');
         }
         kprintf("\n");
@@ -603,12 +601,13 @@ void kheap_debug_dump_bitmap(void)
     kprintf("=== fim do bitmap ===\n");
 }
 
-#endif /* KHEAP_DEBUG */
-
-#ifdef KHEAP_DEBUG
-
 void kheap_debug_dump_blocks(void)
 {
+    if (!heap_is_initialized()) {
+        kprintf("kheap not initialized\n");
+        return;
+    }
+
     uint32_t total_units = heap_current_total_units();
 
     kprintf("=== kheap blocks dump ===\n");
@@ -618,33 +617,25 @@ void kheap_debug_dump_blocks(void)
     kprintf("heap_free_units = %u\n", (uint32_t)heap_free_units);
 
     for (uint32_t u = 0; u < total_units; ) {
-
         uint32_t units = heap_alloc_units[u];
-
         if (units == 0) {
-            /* não é início de bloco, só anda 1 unidade */
             ++u;
             continue;
         }
 
         uintptr_t addr = heap_start_addr + (uintptr_t)u * HEAP_UNIT;
         uint32_t bytes = units * HEAP_UNIT;
-
-        /* Verifica se o primeiro unit está marcado como usado (sanidade) */
         bool used = heap_unit_is_used(u);
 
         kprintf("  bloco @ %p: start_unit=%u, units=%u, bytes=%u, used=%s\n",
-                (void*)addr,
-                u,
-                units,
-                bytes,
-                used ? "yes" : "no");
+                (void*)addr, u, units, bytes, used ? "yes" : "no");
 
-        /* pula direto para depois do bloco atual */
         u += units;
     }
 
     kprintf("=== fim dos blocos ===\n");
 }
+
+
 
 #endif /* KHEAP_DEBUG */

@@ -1,15 +1,20 @@
-#include "paging.h"
+#include "../mm.h"
 #include "../pmm.h"
+#include "paging.h"
 #include "../../klib/memory.h"
 #include "../../klib/kprintf.h"
+#include "../../klib/panic.h"
 #include "../../cpu/cpu.h"
 #include "paging_kmap.h"
 
-extern void paging_load_directory(uint32_t phys);
-extern void paging_enable(void);
 
 page_directory_t* current_directory = NULL;
 page_directory_t* kernel_directory  = NULL;
+static paging_ctx_t g_paging_ctx;
+
+paging_ctx_t *get_paging_ctx(void) {
+    return &g_paging_ctx;
+}
 
 static inline uintptr_t va_to_pa(const paging_ctx_t* ctx, uintptr_t vaddr)
 {
@@ -23,39 +28,59 @@ static inline page_directory_t * get_current_page_directory() {
     return current_directory;
 
 }
+inline uintptr_t virt_to_phys_kernel(uintptr_t va) {
+    if (va >= KERNEL_VIRT_BASE) {
+      return va - KERNEL_OFFSET;
+   }
+   return va; // bootstrap / identity
+}
 
 uintptr_t virt_to_phys_paging(uintptr_t virt)
 {
-    uint32_t pd_idx = (virt >> 22) & 0x3FF;
-    uint32_t pt_idx = (virt >> 12) & 0x3FF;
-    uint32_t offset = virt & 0xFFF;
+    // uint32_t pd_idx = (virt >> 22) & 0x3FF;
+    // uint32_t pt_idx = (virt >> 12) & 0x3FF;
+    uint32_t pd_idx = PD_INDEX(virt);
+    uint32_t pt_idx = PG_INDEX(virt);
+    uint32_t off    = virt & 0xFFF;
 
-    uint32_t *page_directory = (uint32_t *)get_current_page_directory();
-    if (!(page_directory[pd_idx] & PAGE_PRESENT)) {
-        return 0; // não mapeado
-    }
+    page_directory_t* dir = get_current_page_directory();
+    if (!dir) return 0;
 
-    uint32_t *page_table = (uint32_t*)(page_directory[pd_idx] & 0xFFFFF000);
-    if (!(page_table[pt_idx] & PAGE_PRESENT)) {
-        return 0; // não mapeado
-    }
+    // PDE está em VA do dir (OK)
+    uint32_t pde = dir->pde[pd_idx];
+    if (!(pde & PAGE_PRESENT)) return 0;
 
-    uint32_t phys_page = page_table[pt_idx] & 0xFFFFF000;
-    return phys_page + offset;
+    uintptr_t pt_phys = (uintptr_t)(pde & 0xFFFFF000u);
+
+    // PT é físico -> mapear temporariamente
+    uint32_t* pt = (uint32_t*)kmap(pt_phys);
+    uint32_t pte = pt[pt_idx];
+    kunmap();
+
+    if (!(pte & PAGE_PRESENT)) return 0;
+    return (pte & 0xFFFFF000u) + off;
 }
+
 
 
 static inline void invlpg(uintptr_t va) {
     asm volatile("invlpg (%0)" :: "r"(va) : "memory");
 }
 
-/* cria diretório (4KiB) */
+/**
+ * Cria um page_directory para utilização nas rotinase de paging.
+ * Utiliza a função informada em ctx->alloc_page_aligned para obter
+ * um bloco de memória de 4096 byts(4K)
+ */
 page_directory_t* paging_create_directory(const paging_ctx_t* ctx)
 {
     if (!ctx || !ctx->alloc_page_aligned) for(;;);
 
     uintptr_t dir_v = ctx->alloc_page_aligned(sizeof(page_directory_t), PAGE_SIZE);
-    if (!dir_v) for(;;);
+    //if (!dir_v) for(;;);
+    if (!dir_v) {
+        panic("\npaging_create_directory: Erro ao alocar memory!");
+    }
 
     page_directory_t* dir = (page_directory_t*)dir_v;
     kmemset(dir, 0, sizeof(page_directory_t));
@@ -68,17 +93,27 @@ static inline uintptr_t pde_pt_phys(uint32_t pde_entry)
     return (uintptr_t)(pde_entry & 0xFFFFF000u);
 }
 
-/* garante que exista PT para o VA: cria sob demanda
+/* 
+
+garante que exista PT para o VA: cria sob demanda
  * - antes do paging ON: cria via ctx->alloc_page_aligned e zera direto
  * - depois do paging ON: cria via pmm_alloc_frame e zera via kmap
  */
-static uintptr_t ensure_page_table(page_directory_t* dir, const paging_ctx_t* ctx,
-                                   uintptr_t virt, uint32_t pde_flags,
-                                   int paging_is_on)
+/**
+ * Devolve o endereço físico do PT para o endereço informado. 
+ * Caso não exista no PDE, um novo PT é criado e atribuído ao PDE.
+ */
+static uintptr_t create_page_table(page_directory_t* dir, 
+                                    const paging_ctx_t* ctx,
+                                    uintptr_t virt, 
+                                    uint32_t pde_flags,
+                                    int paging_is_on)
 {
-    uint32_t di = PAGE_DIR_INDEX(virt);
+    //Calcula a entrada/index no PD
+    uint32_t di = PD_INDEX(virt);
     uint32_t pde = dir->pde[di];
 
+    //Se o PT já existe, seu endereço físico é devolvido
     if (pde & PAGE_PRESENT) {
         return pde_pt_phys(pde);
     }
@@ -88,13 +123,19 @@ static uintptr_t ensure_page_table(page_directory_t* dir, const paging_ctx_t* ct
     if (!paging_is_on) {
         // bootstrap: aloca acessível diretamente
         uintptr_t pt_v = ctx->alloc_page_aligned(sizeof(page_table_t), PAGE_SIZE);
-        if (!pt_v) for(;;);
+        //if (!pt_v) for(;;);
+        if (!pt_v) {
+            panic("\ncreate_page_table: Erro ao alocar memory!");
+        }
         kmemset((void*)pt_v, 0, sizeof(page_table_t));
         pt_phys = va_to_pa(ctx, pt_v);
     } else {
         // runtime: aloca frame físico e zera via kmap
         pt_phys = pmm_alloc_frame();
-        if (!pt_phys) for(;;);
+        //if (!pt_phys) for(;;);
+        if (!pt_phys) {
+            panic("\ncreate_page_table: Erro ao alocar memory!");
+        }
         page_table_t* pt = (page_table_t*)kmap(pt_phys);
         kmemset(pt, 0, sizeof(page_table_t));
         kunmap();
@@ -107,32 +148,46 @@ static uintptr_t ensure_page_table(page_directory_t* dir, const paging_ctx_t* ct
     return pt_phys;
 }
 
-/* API: map */
-int paging_map(page_directory_t* dir, const paging_ctx_t* ctx,
-               uintptr_t virt, uintptr_t phys, uint32_t flags)
+/**
+ * Mapeia o endereço virtual para o frame indicado pelo endereço físico.
+ * Se houver a necessidade, é criada um "page table(PT)" e vinculado ao
+ * page_directory.
+ * ATENÇÃO: Só deve ser utilizada com o paging ativo.
+ */
+int paging_map(page_directory_t* dir, 
+                const paging_ctx_t* ctx,
+               uintptr_t virt, 
+               uintptr_t phys, 
+               uint32_t flags)
 {
     if (!dir || !ctx) return -1;
 
-    // Você pode marcar se paging já está ON por uma flag global; aqui assumo:
-    // depois de paging_init_minimal, você só chama paging_map com paging ativo.
-    // Se quiser suportar antes, passe isso como argumento ou faça global.
-    int paging_is_on = 1;
+    /**
+     * Verifica se a paginação está ativa no registro CR0
+     */
+    int paging_on = paging_is_on();
+
+    if (!paging_on) {
+            panic("\npaging_map: paginação não está ativa!");
+    }
 
     uint32_t pde_flags = PAGE_RW;
-    if (flags & PAGE_USER) pde_flags |= PAGE_USER;
+    if (flags & PAGE_USER) {
+        pde_flags |= PAGE_USER;
+    }
 
-    uintptr_t pt_phys = ensure_page_table(dir, ctx, virt, pde_flags, paging_is_on);
+    uintptr_t pt_phys = create_page_table(dir, ctx, virt, pde_flags, paging_on);
 
     // acessa PT via kmap
     page_table_t* pt = (page_table_t*)kmap(pt_phys);
 
-    uint32_t ti = PAGE_TABLE_INDEX(virt);
+    uint32_t ti = PG_INDEX(virt);
     pt->entries[ti] = (uint32_t)((phys & 0xFFFFF000u) |
                                 (flags & 0xFFFu) |
                                 PAGE_PRESENT);
 
-    kunmap();
-    invlpg(virt);
+    kunmap();    
+    invalid_tlb(virt);
 
     return 0;
 }
@@ -142,18 +197,19 @@ int paging_unmap(page_directory_t* dir, const paging_ctx_t* ctx, uintptr_t virt)
     (void)ctx;
     if (!dir) return -1;
 
-    uint32_t di = PAGE_DIR_INDEX(virt);
+    uint32_t di = PD_INDEX(virt);
     uint32_t pde = dir->pde[di];
     if (!(pde & PAGE_PRESENT)) return 0;
 
     uintptr_t pt_phys = pde_pt_phys(pde);
     page_table_t* pt = (page_table_t*)kmap(pt_phys);
 
-    uint32_t ti = PAGE_TABLE_INDEX(virt);
+    uint32_t ti = PG_INDEX(virt);
     pt->entries[ti] = 0;
 
     kunmap();
-    invlpg(virt);
+    //invlpg(virt);
+    invalid_tlb(virt);
 
     return 0;
 }
@@ -163,14 +219,14 @@ uintptr_t paging_get_physical(page_directory_t* dir, const paging_ctx_t* ctx, ui
     (void)ctx;
     if (!dir) return 0;
 
-    uint32_t di = PAGE_DIR_INDEX(virt);
+    uint32_t di = PD_INDEX(virt);
     uint32_t pde = dir->pde[di];
     if (!(pde & PAGE_PRESENT)) return 0;
 
     uintptr_t pt_phys = pde_pt_phys(pde);
     page_table_t* pt = (page_table_t*)kmap(pt_phys);
 
-    uint32_t ti = PAGE_TABLE_INDEX(virt);
+    uint32_t ti = PG_INDEX(virt);
     uint32_t e = pt->entries[ti];
 
     kunmap();
@@ -190,7 +246,10 @@ void paging_init_minimal(const paging_ctx_t* ctx)
 {
     if (!ctx || !ctx->alloc_page_aligned) for(;;);
 
+    //Aloca e devolve um bloco de 4096 bytes para o page_directory
     kernel_directory = paging_create_directory(ctx);
+
+    //O endereço é salvo na variável global current_directory
     current_directory = kernel_directory;
 
     // prepara KMAP (precisa do kernel_directory existente)
@@ -200,31 +259,48 @@ void paging_init_minimal(const paging_ctx_t* ctx)
 
     // identity limit
     uintptr_t id_limit = ctx->bootstrap_identity_limit;
-    if (id_limit == 0) id_limit = 64u * 1024u * 1024u;
-    id_limit = (id_limit / PAGE_SIZE) * PAGE_SIZE;
+    if (id_limit == 0) {
+        id_limit = 64u * 1024u * 1024u;
+    }
+    //id_limit = (id_limit / PAGE_SIZE) * PAGE_SIZE;
+    id_limit = ALIGN_DOWN(id_limit, PAGE_SIZE);
 
-    // Durante init (paging OFF), criamos PTs via alloc_page_aligned (sem kmap)
+    //Fixo como falso, porque estamos realizado o pagging inicial e precisamos 
+    //usar boot_early_alloc. 
+    int paging_on = false;
+
+
+   
+    /* Faz o mapeamento identity-mapped.
+       "paging_is_on" é informado como  falso.
+       pagging identity: Virt 0-id_limit
+       criamos PTs via alloc_page_aligned (sem kmap)
+    */
     for (uintptr_t phys = 0; phys < id_limit; phys += PAGE_SIZE) {
-        // aqui paging_is_on=0 implicitamente, então usamos ensure_page_table bootstrap:
+        
         uint32_t pde_flags = PAGE_RW;
-        uintptr_t pt_phys = ensure_page_table(kernel_directory, ctx, phys, pde_flags, 0);
+
+        //Devolve o PT para o endereço. Se não existir, cria um e devolve.
+        uintptr_t pt_phys = create_page_table(kernel_directory, ctx, phys, pde_flags, paging_on);
 
         // pt é acessível diretamente porque alocado via alloc_page_aligned (bootstrap identity)
         page_table_t* pt = (page_table_t*)pt_phys; // válido no bootstrap identity
-        uint32_t ti = PAGE_TABLE_INDEX(phys);
+        uint32_t ti = PG_INDEX(phys);
         pt->entries[ti] = (uint32_t)((phys & 0xFFFFF000u) | (kflags & 0xFFFu) | PAGE_PRESENT);
     }
 
-    // map kernel high-half
+    // mapeia apenas o espaço ocupado pelo kernel high-half
     for (uintptr_t phys = ctx->kernel_phys_start; phys < ctx->kernel_phys_end; phys += PAGE_SIZE) {
+
+
         uintptr_t virt = ctx->kernel_virt_base + (phys - ctx->kernel_phys_start);
 
         uint32_t pde_flags = PAGE_RW;
-        uintptr_t pt_phys = ensure_page_table(kernel_directory, ctx, virt, pde_flags, 0);
+        uintptr_t pt_phys = create_page_table(kernel_directory, ctx, virt, pde_flags, paging_on);
 
         // bootstrap identity: pt_phys acessível direto
         page_table_t* pt = (page_table_t*)pt_phys;
-        uint32_t ti = PAGE_TABLE_INDEX(virt);
+        uint32_t ti = PG_INDEX(virt);
         pt->entries[ti] = (uint32_t)((phys & 0xFFFFF000u) | (kflags & 0xFFFu) | PAGE_PRESENT);
     }
 
@@ -252,7 +328,7 @@ page_directory_t* paging_create_user_directory_from_kernel(const paging_ctx_t* c
     page_directory_t* udir = paging_create_directory(ctx);
 
     // copia apenas high-half: assume kernel_virt_base alinhado 4MiB (ex.: 0xC0000000)
-    uint32_t start = PAGE_DIR_INDEX(ctx->kernel_virt_base);
+    uint32_t start = PD_INDEX(ctx->kernel_virt_base);
     for (uint32_t i = start; i < 1024u; ++i) {
         udir->pde[i] = kdir->pde[i];
     }

@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "./page/paging.h"
 
 /* Granularidade básica da heap (cada unidade) */
 #ifndef HEAP_UNIT
@@ -35,24 +36,24 @@
 #define HEAP_ALIGNMENT   8u
 #endif
 
-/* Tamanho de página usado pela heap (deve casar com o VMM/PMM) */
-#ifndef KHEAP_PAGE_SIZE
-#define KHEAP_PAGE_SIZE  4096u
+#ifndef KHEAP_BASE
+#define KHEAP_BASE 0xD0000000u
 #endif
 
-/* Helpers de alinhamento (se ainda não estiverem em outro header) */
-#ifndef ALIGN_UP
-//#define ALIGN_UP(x, a)   ( ((uintptr_t)(x) + ((a) - 1u)) & ~((uintptr_t)((a) - 1u)) )
+#ifndef KHEAP_PAGE_FLAGS
+// flags típicos para páginas do kernel: RW + PRESENT é aplicado dentro de paging_map,
+// mas mantemos RW aqui e o map adiciona PRESENT.
+#define KHEAP_PAGE_FLAGS (PAGE_RW)
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define HEAP_WORD_INDEX(unit_idx)   ((unit_idx) / 32u)
+#define HEAP_BIT_OFFSET(unit_idx)   ((unit_idx) % 32u)
+
 
 /* ----------------------------------------------------
  * Inicialização da heap
  * -------------------------------------------------- */
-
+void map_heap_initial(const paging_ctx_t* ctx, size_t bytes);
 /**
  * Inicializa a heap a partir de um endereço virtual `heap_start`
  * e usando inicialmente `heap_size` bytes.

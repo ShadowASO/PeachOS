@@ -54,3 +54,8 @@ antes dele, as posições de memória são modificadas. Con segui Eliminei secti
 ajustando a ordem de linkagem no Makefile;
 b) ajustes do bootloader e no kernel.asm para retirar as chamadas de criação
 das tabelas de paging;
+
+# -----------------------------------------------------------------------------
+#             Em 04-01-2026: Versão 1.0.18                                  
+# -----------------------------------------------------------------------------
+a) gerenciamento de memória: ajustes na paginação e alocação de memória;

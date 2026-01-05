@@ -12,6 +12,7 @@
 #include "../klib/memory.h"
 #include "../status.h"
 #include "path.h"
+#include "../klib/kprintf.h"
 
 
 static int pathparser_path_valid_format(const char* filename)
@@ -38,6 +39,7 @@ static int pathparser_get_drive_by_path(const char** path)
 static struct path_root* pathparser_create_root(int drive_number)
 {
     struct path_root* path_r = kmalloc(sizeof(struct path_root));
+    //kprintf("\npath_root=%p",path_r);
     if (!path_r)
     {
         return NULL;

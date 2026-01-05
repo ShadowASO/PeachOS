@@ -40,5 +40,23 @@ invalid_tlb:
     invlpg [eax]
     ret
 
+; Devolve o registro CR0
+; USO: uint32_t get_cr0(void);
+get_cr0:
+    mov eax, cr0    
+    ret
+
+; x86 (32-bit), NASM
+; int paging_is_on(void);
+; EAX = 1 se paging ON (CR0.PG=1), EAX = 0 se OFF
+global paging_is_on
+
+paging_is_on:
+    mov     eax, cr0
+    bt      eax, 31          ; testa bit 31 (PG)
+    setc    al               ; AL = 1 se PG=1 (carry=1), senão 0
+    movzx   eax, al
+    ret
+
 
 section .note.GNU-stack noalloc noexec nowrite progbits

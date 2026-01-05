@@ -11,7 +11,7 @@
 #include "./mm/bootmem.h"
 #include "./mm/pmm.h"
 #include "./mm/kheap.h"
-#include "./mm/mm_setup.h"
+#include "./mm/mm.h"
 #include "./cpu/cpu.h"
 #include "./mm/page/paging.h"
 #include "./drivers/disk/disk.h"
@@ -122,6 +122,11 @@ void kernel_main(void *e820_address) {
 
     kprintf("\nHello, World!");
 
+    void *p=kmalloc(400);
+    kprintf("\np=%p",p);
+
+   
+
     int fd = fopen("0:/hello.txt","r");
     kprintf("\n\nfd - phys address=%p", virt_to_phys_paging((uintptr_t)&fd));
     if(fd) {
@@ -160,13 +165,7 @@ void kernel_main(void *e820_address) {
     
     kmemset(buf, 0xAA, 512);
 
-    //int val=4099;
-    // kprintf("\nMemória: %d", val);
-    // //int val_up=ALIGN_UP(val, 4096);
-    // kprintf("\nMemória: %d", ALIGN_UP(val, 4096));
-    // kprintf("\nMemória: %d", ALIGN_DOWN(val, 4096));
-   
-    
+         
     _wait();
     
     

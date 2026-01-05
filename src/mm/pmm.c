@@ -3,9 +3,12 @@
 #include "pmm.h"
 #include "bootmem.h"
 #include "../klib/kprintf.h"
+#include "../config.h"
+#include "./mm.h"
+#include "./page/paging.h"
 
 /* Bitmap global.
- * Cada bit representa um frame de PMM_FRAME_SIZE bytes.
+ * Cada bit representa um frame de FRAME_SIZE bytes.
  */
 uint32_t *g_pmm_bitmap = NULL;
 static uint64_t g_pmm_bitmap_phys = 0;
@@ -26,12 +29,12 @@ static size_t g_pmm_bitmap_size    = 0;  // em bytes (útil p/ pmm_bitmap_end_ad
 
 static inline size_t pmm_addr_to_frame(uintptr_t addr)
 {
-    return (size_t)(addr / PMM_FRAME_SIZE);
+    return (size_t)(addr / FRAME_SIZE);
 }
 
 static inline uintptr_t pmm_frame_to_addr(size_t frame_idx)
 {
-    return (uintptr_t)(frame_idx * (size_t)PMM_FRAME_SIZE);
+    return (uintptr_t)(frame_idx * (size_t)FRAME_SIZE);
 }
 
 static void pmm_mask_invalid_tail_bits(void)
@@ -43,18 +46,22 @@ static void pmm_mask_invalid_tail_bits(void)
     g_pmm_bitmap[g_pmm_bitmap_words - 1] |= invalid_mask; // força inválidos como usados
 }
 
-
+/**
+ * Calcula o tamanho em byte do espaço necessário para acomodar um bitmap suficiente
+ * para controlar o tamanho de memória informada. Normalmente, o bitmap será criado
+ * para acomodar toda a memória identificada pelo e820.
+ */
 
 size_t pmm_calc_bitmap_size_bytes(uint64_t phys_mem_size)
 {
     uint64_t frames64 = 0;
 
     if (phys_mem_size > 0) {
-        frames64 = (phys_mem_size + (uint64_t)PMM_FRAME_SIZE - 1) / (uint64_t)PMM_FRAME_SIZE;
+        frames64 = (phys_mem_size + (uint64_t)FRAME_SIZE - 1) / (uint64_t)FRAME_SIZE;
     }
 
-    if (frames64 > (uint64_t)PMM_MAX_FRAMES) {
-        frames64 = (uint64_t)PMM_MAX_FRAMES;
+    if (frames64 > (uint64_t)MAX_FRAMES) {
+        frames64 = (uint64_t)MAX_FRAMES;
     }
 
     size_t frames = (size_t)frames64;
@@ -67,9 +74,9 @@ size_t pmm_calc_bitmap_size_bytes(uint64_t phys_mem_size)
     //         (unsigned)words,
     //         (unsigned)bytes);
 
-    // kprintf("PMM_FRAME_SIZE=%x PMM_MAX_FRAMES=%x\n",
-    //         (unsigned)PMM_FRAME_SIZE,
-    //         (unsigned)PMM_MAX_FRAMES);
+    // kprintf("FRAME_SIZE=%x MAX_FRAMES=%x\n",
+    //         (unsigned)FRAME_SIZE,
+    //         (unsigned)MAX_FRAMES);
 
     return bytes;
 }
@@ -77,7 +84,7 @@ size_t pmm_calc_bitmap_size_bytes(uint64_t phys_mem_size)
 
 /* 
  * Retorna o endereço físico imediatamente após o bitmap,
- * alinhado a PMM_FRAME_SIZE. Este endereço será o
+ * alinhado a FRAME_SIZE. Este endereço será o
  * "heap_region_start" do seu layout da heap.
  *
  * [ heap_region_start ] ----------------------+
@@ -96,13 +103,13 @@ uintptr_t pmm_bitmap_end_addr(void)
     }
 
     uintptr_t bitmap_end = (uintptr_t)g_pmm_bitmap + g_pmm_bitmap_size;
-    return ALIGN_UP(bitmap_end, PMM_FRAME_SIZE);
+    return ALIGN_UP(bitmap_end, FRAME_SIZE);
 }
 
 /* Retorna quantidade de memória física livre em bytes. */
 size_t pmm_get_free_memory_bytes(void)
 {
-    return g_pmm_free_frames * (size_t)PMM_FRAME_SIZE;
+    return g_pmm_free_frames * (size_t)FRAME_SIZE;
 }
 
 /* -----------------------------------------------------------
@@ -110,14 +117,14 @@ size_t pmm_get_free_memory_bytes(void)
  * ----------------------------------------------------------- */
 
 static inline size_t pmm_addr_to_frame64(uint64_t addr) {
-    return (size_t)(addr / PMM_FRAME_SIZE);
+    return (size_t)(addr / FRAME_SIZE);
 }
 
 void pmm_mark_region_used64(uint64_t base_phys, uint64_t length)
 {
     if (length == 0 || g_pmm_total_frames == 0) return;
 
-    uint64_t limit_bytes = (uint64_t)g_pmm_total_frames * PMM_FRAME_SIZE;
+    uint64_t limit_bytes = (uint64_t)g_pmm_total_frames * FRAME_SIZE;
 
     // clamp base dentro do limite
     if (base_phys >= limit_bytes) return;
@@ -137,7 +144,7 @@ void pmm_mark_region_free64(uint64_t base_phys, uint64_t length)
 {
     if (length == 0 || g_pmm_total_frames == 0) return;
 
-    uint64_t limit_bytes = (uint64_t)g_pmm_total_frames * PMM_FRAME_SIZE;
+    uint64_t limit_bytes = (uint64_t)g_pmm_total_frames * FRAME_SIZE;
 
     if (base_phys >= limit_bytes) return;
 
@@ -171,7 +178,7 @@ void pmm_mark_regions_status(void)
     }
 
     // Nunca use frame 0
-    pmm_mark_region_used64(0, PMM_FRAME_SIZE);
+    pmm_mark_region_used64(0, FRAME_SIZE);
 
     // Kernel em físico
     pmm_mark_region_used64((uint64_t)get_kernel_ini_phys(),
@@ -209,9 +216,11 @@ static void pmm_recalc_free_frames(void)
     g_pmm_free_frames = g_pmm_total_frames - used;
 }
 
-/* -----------------------------------------------------------
- * Inicialização
- * ----------------------------------------------------------- */
+
+/**
+ * Faz a inicialização do bitmap, marcando as regiões livre e indisponíveis,
+ * além de calcular a memória física disponível, a quantidade de frames.
+ */
 
 void pmm_init(uint32_t *bitmap_ini, uint64_t phys_mem_size)
 {
@@ -224,10 +233,10 @@ void pmm_init(uint32_t *bitmap_ini, uint64_t phys_mem_size)
 
     uint64_t frames64 = 0;
     if (phys_mem_size > 0) {
-        frames64 = (phys_mem_size + (uint64_t)PMM_FRAME_SIZE - 1) / (uint64_t)PMM_FRAME_SIZE;
+        frames64 = (phys_mem_size + (uint64_t)FRAME_SIZE - 1) / (uint64_t)FRAME_SIZE;
     }
-    if (frames64 > (uint64_t)PMM_MAX_FRAMES) 
-        frames64 = (uint64_t)PMM_MAX_FRAMES;
+    if (frames64 > (uint64_t)MAX_FRAMES) 
+        frames64 = (uint64_t)MAX_FRAMES;
 
 
 
@@ -249,7 +258,9 @@ void pmm_init(uint32_t *bitmap_ini, uint64_t phys_mem_size)
 }
 
 
-
+/**
+ * Aloca um frame de memória e devolve o seu endereço físico.
+ */
 uintptr_t pmm_alloc_frame(void)
 {
     if (g_pmm_free_frames == 0 || g_pmm_total_frames == 0) {
@@ -276,7 +287,7 @@ uintptr_t pmm_alloc_frame(void)
                 PMM_SET_BIT(g_pmm_bitmap, frame_idx);
                 if (g_pmm_free_frames) --g_pmm_free_frames;
 
-                return (uintptr_t)frame_idx * (uintptr_t)PMM_FRAME_SIZE;
+                return (uintptr_t)frame_idx * (uintptr_t)FRAME_SIZE;
             }
         }
     }
@@ -290,7 +301,7 @@ void pmm_free_frame(uintptr_t frame_addr)
     if (g_pmm_total_frames == 0) return;
 
     // Exige alinhamento de página/frame
-    if (frame_addr & (PMM_FRAME_SIZE - 1)) {
+    if (frame_addr & (FRAME_SIZE - 1)) {
         return; // ou log/panic
     }
 
@@ -303,7 +314,7 @@ void pmm_free_frame(uintptr_t frame_addr)
     // if (frame_addr >= kernel_start && frame_addr < kernel_end) return;
     // if (frame_addr >= bitmap_start && frame_addr < bitmap_end) return;
 
-    size_t frame_idx = (size_t)(frame_addr / PMM_FRAME_SIZE);
+    size_t frame_idx = (size_t)(frame_addr / FRAME_SIZE);
     if (frame_idx >= g_pmm_total_frames) {
         return;
     }

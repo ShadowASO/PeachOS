@@ -26,20 +26,6 @@
 #include <stdbool.h>
 #include "../cpu/e820.h"
 
-// Alinhamento básico (ajuste se necessário)
-#ifndef boot_HEAP_ALIGNMENT
-#define boot_HEAP_ALIGNMENT 8
-#endif
-
-#ifndef PAGE_SIZE
-#define PAGE_SIZE 4096u
-#endif
-
-#define ALIGN_UP(x, align)   (((x) + ((align) - 1)) & ~((align) - 1))
-#define ALIGN_DOWN(x, align) ((x) & ~((align) - 1))
-
-
-#define INT32_BYTE_SIZE 4
 
 // Inicializa o early allocator em um range [start, start+size)
 //void boot_heap_init(uint32_t start, uint32_t size);

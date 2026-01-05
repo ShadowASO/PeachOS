@@ -3,13 +3,12 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "../../config.h"
+#include "../mm.h"
 
-#ifndef PAGE_SIZE
-#define PAGE_SIZE 4096u
-#endif
 
-#ifndef PAGE_TABLE_ENTRIES
-#define PAGE_TABLE_ENTRIES 1024u
+#ifndef PT_ENTRIES
+#define PT_ENTRIES 1024u
 #endif
 
 /* Flags */
@@ -23,18 +22,19 @@
 #define PAGE_4MB       0x080
 #define PAGE_GLOBAL    0x100
 
-#define PAGE_DIR_INDEX(vaddr)   ((((uint32_t)(vaddr)) >> 22) & 0x3FFu)
-#define PAGE_TABLE_INDEX(vaddr) ((((uint32_t)(vaddr)) >> 12) & 0x3FFu)
+/* Calcula o índice na PD e PT de acordo com o endereço de memória */
+#define PD_INDEX(vaddr)   ((((uint32_t)(vaddr)) >> 22) & 0x3FFu)
+#define PG_INDEX(vaddr) ((((uint32_t)(vaddr)) >> 12) & 0x3FFu)
 
 typedef uint32_t page_entry_t;
 
 typedef struct page_table {
-    page_entry_t entries[PAGE_TABLE_ENTRIES];
+    page_entry_t entries[PT_ENTRIES];
 } page_table_t;
 
 /* Page Directory deve caber em 4KiB (1 frame) */
 typedef struct page_directory {
-    uint32_t pde[PAGE_TABLE_ENTRIES]; /* PDEs (PT phys + flags) */
+    uint32_t pde[PT_ENTRIES]; /* PDEs (PT phys + flags) */
 } page_directory_t;
 
 typedef struct paging_ctx {
@@ -63,7 +63,16 @@ typedef struct paging_ctx {
 extern page_directory_t* current_directory;
 extern page_directory_t* kernel_directory;
 
+
+void paging_load_directory(uint32_t phys);
+void paging_enable(void);
+void paging_disable(void);
+void invalid_tlb(uintptr_t va);
+int paging_is_on(void);
+
 uintptr_t virt_to_phys_paging(uintptr_t virt);
+
+uintptr_t virt_to_phys_kernel(uintptr_t va) ;
 
 /* init minimal + kmap pronto */
 void paging_init_minimal(const paging_ctx_t* ctx);
@@ -92,5 +101,7 @@ int user_map_pages(page_directory_t* udir,
                     const paging_ctx_t* ctx,
                    uintptr_t uva_start, 
                    size_t size, uint32_t flags);
+
+paging_ctx_t *get_paging_ctx(void);
 
 #endif

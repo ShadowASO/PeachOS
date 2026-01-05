@@ -3,8 +3,16 @@
 
 #include <stdint.h>
 
-#define KERNEL_VIRT_BASE 0xC0000000u
-#define KERNEL_PHYS_BASE 0x00100000u
+// #define KERNEL_VIRT_BASE 0xC0000000u
+// #define KERNEL_PHYS_BASE 0x00100000u
+
+//---------------------------------------------------- */
+#define KERNEL_PHYS_BASE  0x00100000      /* Bootloader carrega aqui */
+
+/* Kernel executa aqui     */
+#define KERNEL_VIRT_BASE  0xC0000000   
+
+#define KERNEL_OFFSET    (KERNEL_VIRT_BASE - KERNEL_PHYS_BASE)
 
 #define KMAP_VA 0xFFC00000u
 
@@ -21,6 +29,8 @@ static inline uintptr_t virt_to_phys_highhalf(uintptr_t virt)
 
     return virt - KERNEL_VIRT_BASE + KERNEL_PHYS_BASE;
 }
+
+
 
 
 #endif

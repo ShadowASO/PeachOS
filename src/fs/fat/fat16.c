@@ -956,7 +956,7 @@ err_out:
         if (descriptor->item) fat16_fat_item_free(descriptor->item);
         kfree(descriptor);
     }
-    return ERROR(err_code);
+    return ERR_PTR(err_code);
 }
 
 
